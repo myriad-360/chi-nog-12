@@ -1,1 +1,29 @@
+# Local Terraform state
+terraform.tfstate
+terraform.tfstate.backup
+*.tfstate
+*.tfstate.backup
+
+# Crash log files
+crash.log
+
+# Terraform plan files
+*.tfplan
+
+# Variable overrides
 *.auto.tfvars
+*.tfvars
+
+# Sensitive files
+terraform/chinog12.auto.tfvars
+
+# .terraform working directory
+.terraform/
+
+# Ansible
+*.retry
+
+# SSH credentials (just in case)
+*.pem
+*.key
+*.pub
