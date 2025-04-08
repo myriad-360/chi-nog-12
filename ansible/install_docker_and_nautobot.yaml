@@ -1,0 +1,56 @@
+---
+- name: Setup Nautobot using Docker
+  hosts: nautobot
+  become: true
+
+  tasks:
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: true
+
+    - name: Install Docker Compose
+      get_url:
+        url: https://github.com/docker/compose/releases/download/v2.24.6/docker-compose-linux-x86_64
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+
+    - name: Install pip3
+      apt:
+        name: python3-pip
+        state: present
+
+    - name: Install Docker Python module
+      pip:
+        name: docker
+
+    - name: Create Nautobot directory
+      file:
+        path: /opt/nautobot
+        state: directory
+        mode: '0755'
+
+    - name: Create docker-compose.yml for Nautobot
+      copy:
+        dest: /opt/nautobot/docker-compose.yml
+        content: |
+          version: '3'
+          services:
+            nautobot:
+              image: ghcr.io/nautobot/nautobot:latest
+              ports:
+                - "8000:8000"
+              environment:
+                - SUPERUSER_NAME=admin
+                - SUPERUSER_EMAIL=admin@example.com
+                - SUPERUSER_PASSWORD=admin
+              volumes:
+                - nautobot_data:/opt/nautobot
+          volumes:
+            nautobot_data:
+
+    - name: Launch Nautobot with Docker Compose
+      command: docker-compose up -d
+      args:
+        chdir: /opt/nautobot
