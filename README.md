@@ -1,4 +1,3 @@
-```markdown
 # CHI-NOG 12: Network Automation Demo - From Zero to Hero in 30 Minutes
 
 This repo demonstrates a modern network automation pipeline using **Terraform**, **Ansible**, **Docker**, and **Nautobot** — all deployed automatically into AWS for rapid iteration and demo readiness.
