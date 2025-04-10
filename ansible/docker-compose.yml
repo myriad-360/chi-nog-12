@@ -13,7 +13,6 @@ services:
       - NAUTOBOT_DB_USER=nautobot
       - NAUTOBOT_DB_PASSWORD=nautobot
       - NAUTOBOT_REDIS_HOST=redis
-      - NAUTOBOT_ALLOWED_HOSTS={{ nautobot_allowed_hosts }}
     depends_on:
       - db
       - redis
