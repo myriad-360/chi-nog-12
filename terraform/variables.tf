@@ -11,12 +11,12 @@ variable "aws_secret_key" {
 variable "aws_region" {
   type        = string
   description = "AWS region"
-  default     = "us-east-1"
+  default     = "us-east-2"
 }
 
 variable "instance_type" {
   type        = string
-  default     = "t3.medium"
+  default     = "t2.micro"
 }
 
 variable "key_name" {
