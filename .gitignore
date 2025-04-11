@@ -27,3 +27,4 @@ terraform/chinog12.auto.tfvars
 *.pem
 *.key
 *.pub
+ansible/nautobot-superuser-vars.yml
