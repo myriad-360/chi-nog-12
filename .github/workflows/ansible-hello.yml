@@ -8,7 +8,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
     - name: Create SSH key
       run: |
         echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
