@@ -1,0 +1,33 @@
+---
+- name: Deploy Nautobot Lab container using Docker Compose
+  hosts: localhost
+  become: true
+
+  vars_files:
+    - ./nautobot-superuser-vars.yml
+
+  vars:
+    nautobot_compose_path: /home/ubuntu/chi-nog-12/docker/nautobot
+    nautobot_container_name: nautobot
+
+  tasks:
+    - name: Bring up Nautobot stack with Docker Compose
+      ansible.builtin.command:
+        cmd: docker-compose up -d
+        chdir: "{{ nautobot_compose_path }}"
+
+    - name: Create Nautobot superuser
+      ansible.builtin.command:
+        cmd: docker-compose exec -T nautobot nautobot-server createsuperuser --noinput
+        chdir: "{{ nautobot_compose_path }}"
+      environment:
+        NAUTOBOT_SUPERUSER_NAME: "{{ nautobot_superuser_name }}"
+        NAUTOBOT_SUPERUSER_EMAIL: "{{ nautobot_superuser_email }}"
+        NAUTOBOT_SUPERUSER_PASSWORD: "{{ nautobot_superuser_password }}"
+      register: superuser_result
+      failed_when: false
+      changed_when: "'Superuser created successfully' in superuser_result.stdout"
+
+    - name: Debug superuser creation output
+      ansible.builtin.debug:
+        var: superuser_result.stdout
