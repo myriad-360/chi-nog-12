@@ -1,0 +1,23 @@
+name: Run Ansible Hello World on EC2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-ansible:
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Create SSH key
+      run: |
+        echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
+        chmod 600 key.pem
+
+    - name: Run Ansible playbook from GitHub Actions against EC2
+      run: |
+        ansible-playbook ansible/ansible-hello-world-via-actions.yml \
+          -i "${{ secrets.EC2_HOST }}," \
+          --user ${{ secrets.EC2_USER }} \
+          --private-key key.pem \
+          -e "ansible_python_interpreter=/usr/bin/python3"
