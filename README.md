@@ -1,107 +1,101 @@
-# CHI-NOG 12: Network Automation Demo - From Zero to Hero in 30 Minutes
+# chi-nog-12
 
-This repo demonstrates a modern network automation pipeline using **Terraform**, **Ansible**, **Docker**, and **Nautobot** — all deployed automatically into AWS for rapid iteration and demo readiness.
+This project provisions and configures a fully automated Nautobot lab using Terraform and Ansible. The stack consists of an AWS EC2 instance, Docker Compose-based Nautobot deployment, and a bootstrapped superuser.
 
-## 🔧 What It Does
+## Project Structure
 
-- Provisions an EC2 instance using Terraform
-- Dynamically uses your public IP for:
-  - SSH access
-  - Nautobot's `ALLOWED_HOSTS` setting
-- Installs Docker and Ansible via cloud-init and Ansible
-- Deploys Nautobot using Docker Compose
-  - With Postgres and Redis dependencies
-  - Port 8000 exposed via AWS Security Group
-- Runs a templated Ansible playbook that:
-  - Copies in a rendered `docker-compose.yml`
-  - Boots up the full Nautobot stack
-  - Validates your IP automatically
-
-## 🧰 Tech Stack
-
-- **Terraform**: Infra provisioning (EC2, SG, subnet selection)
-- **Ansible**: Instance configuration and app orchestration
-- **Docker Compose**: Multi-container deployment (Nautobot, Redis, Postgres)
-- **AWS**: Hosted environment using defaults or custom VPC/subnet
-
-## 🚀 Usage
-
-### 1. Configure your variables
-
-In `terraform/chinog12.auto.tfvars`:
-
-```hcl
-aws_access_key    = "YOUR_KEY"
-aws_secret_key    = "YOUR_SECRET"
-key_name          = "jonhowe-chinogdemo12"
-aws_region        = "us-east-2"
-instance_type     = "t3.medium"
-vpc_name          = ""  # leave empty to use default VPC
-subnet_name       = ""  # leave empty to use first subnet in selected VPC
-```
-
-### 2. Deploy with Terraform
-
-```bash
-cd terraform
-terraform init
-terraform apply
-```
-
-Your public IP is dynamically used to:
-- Allow SSH (port 22)
-- Allow HTTP access to Nautobot (port 8000)
-- Set Nautobot's `ALLOWED_HOSTS` correctly
-
-### 3. Access Nautobot
-
-After deployment:
-
-```bash
-terraform output instance_ip
-```
-
-Visit in your browser:
-
-```
-http://<instance_ip>:8000
-```
-
-Default credentials:
-- **Username**: `admin`
-- **Password**: `admin`
-
-## 📂 File Structure
-
-```
+\```
 .
+├── LICENSE
+├── README.md
 ├── ansible
-│   ├── docker-compose.yml.j2
-│   └── install_docker_and_nautobot.yaml
+│   ├── ansible-hello-world-via-actions.yml           # Example workflow
+│   ├── ansible.cfg                                   # Custom Ansible config
+│   ├── deploy_nautobot_lab.yaml                      # Main playbook to deploy Nautobot
+│   └── nautobot-superuser-vars.yml                   # Superuser credentials (NOT checked in)
+├── docker
+│   └── nautobot
+│       └── docker-compose.yml                        # Docker Compose file for Nautobot
 ├── terraform
-│   ├── chinog12.auto.tfvars
-│   ├── main.tf
-│   ├── variables.tf
-│   └── ...
-└── README.md
-```
+│   ├── chinog12.auto.tfvars                          # Input variables (e.g. keys, instance type)
+│   ├── main.tf                                       # Main Terraform logic (provision EC2 + run Ansible)
+│   ├── terraform.tfstate                             # Terraform state file
+│   ├── terraform.tfstate.backup                      # State backup
+│   └── variables.tf                                  # Terraform input variable declarations
+└── terraform.tfstate                                 # Root-level TF state link
+\```
 
-## 🧠 Tips
+## Overview
 
-- To reapply updated compose or playbook logic:
+This project automates the provisioning and configuration of a Nautobot instance using:
 
-```bash
-terraform taint null_resource.copy_playbook
-terraform taint null_resource.run_ansible
-terraform apply
-```
+- **Terraform**: Creates an EC2 instance, installs Docker, Ansible, and copies project files.
+- **Ansible**: Brings up the Docker Compose stack and creates a Nautobot superuser.
+- **Docker Compose**: Launches the Nautobot container using `networktocode/nautobot-lab`.
 
-- Use `docker ps` and `docker logs` on the instance to debug
-- Use `curl -I http://localhost:8000` on the instance to verify service status
+## Prerequisites
 
----
+- Terraform 1.5+
+- Ansible 2.15+
+- AWS access key and secret key
+- SSH keypair registered in AWS
+- Docker Compose v1 (`docker-compose` CLI) is used in this setup
 
-This is a complete demo framework for showcasing infrastructure-as-code and DevOps principles applied to network automation.
+## Setup Instructions
 
-Happy automating!
-```
+1. **Clone the repo**
+
+   \```bash
+   git clone https://github.com/your-org/chi-nog-12.git
+   cd chi-nog-12
+   \```
+
+2. **Create `terraform/chinog12.auto.tfvars`**
+
+   Example:
+
+   \```hcl
+   aws_region     = "us-east-2"
+   aws_access_key = "your-access-key"
+   aws_secret_key = "your-secret-key"
+   instance_type  = "t3.small"
+   key_name       = "your-keypair-name"
+   vpc_name       = ""
+   subnet_name    = ""
+   \```
+
+3. **Create `ansible/nautobot-superuser-vars.yml`**
+
+   This file should not be checked into version control. Example:
+
+   \```yaml
+   nautobot_superuser_name: admin
+   nautobot_superuser_email: admin@example.com
+   nautobot_superuser_password: admin
+   \```
+
+4. **Initialize and apply Terraform**
+
+   \```bash
+   cd terraform
+   terraform init
+   terraform apply
+   \```
+
+5. **Access Nautobot**
+
+   After deployment, Terraform will output the instance's public IP. Open:
+
+   \```
+   http://<public-ip>:8000
+   \```
+
+## Notes
+
+- All automation runs from inside the EC2 instance.
+- Ansible playbooks are copied to and executed remotely by Terraform.
+- `docker-compose` is used directly (v1 CLI). If using Docker Compose v2, updates are required.
+
+## License
+
+This project is licensed under the MIT License.
