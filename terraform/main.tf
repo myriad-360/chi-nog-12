@@ -23,12 +23,10 @@ data "http" "my_ip" {
 
 data "aws_vpc" "selected" {
   count = var.vpc_name == "" ? 0 : 1
-
   filter {
     name   = "tag:Name"
     values = [var.vpc_name]
   }
-
   filter {
     name   = "state"
     values = ["available"]
@@ -46,23 +44,19 @@ locals {
 
 data "aws_subnet" "selected" {
   count = var.subnet_name == "" ? 0 : 1
-
   filter {
     name   = "tag:Name"
     values = [var.subnet_name]
   }
-
   vpc_id = local.vpc_id
 }
 
 data "aws_subnets" "default" {
   count = var.subnet_name == "" ? 1 : 0
-
   filter {
     name   = "vpc-id"
     values = [local.vpc_id]
   }
-
   filter {
     name   = "state"
     values = ["available"]
@@ -103,12 +97,10 @@ resource "aws_security_group" "nautobot" {
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"]
-
   filter {
     name   = "name"
     values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
   }
-
   filter {
     name   = "virtualization-type"
     values = ["hvm"]
@@ -124,37 +116,27 @@ resource "aws_instance" "nautobot_host" {
   associate_public_ip_address = true
 
   user_data = <<-EOF
-              #!/bin/bash
-              apt update
-              apt install -y software-properties-common
-              add-apt-repository --yes --update ppa:ansible/ansible
-              apt install -y ansible docker.io python3-pip
-              usermod -aG docker ubuntu
-              EOF
+                #!/bin/bash
+                apt-get update
+                apt-get install -y software-properties-common
+                apt-get install -y ansible git python3-pip docker.io docker-compose
+                usermod -aG docker ubuntu
+                EOF
 
   tags = {
     Name = "nautobot-demo"
   }
 }
 
-resource "null_resource" "copy_playbook" {
+resource "null_resource" "wait_for_cloud_init" {
   depends_on = [aws_instance.nautobot_host]
 
-  provisioner "file" {
-    source      = "${path.module}/../ansible/install_docker_and_nautobot.yaml"
-    destination = "/home/ubuntu/install_docker_and_nautobot.yaml"
-
-    connection {
-      type        = "ssh"
-      user        = "ubuntu"
-      private_key = file("~/.ssh/jonhowe-chinogdemo12.pem")
-      host        = aws_instance.nautobot_host.public_ip
-    }
-  }
-
-  provisioner "file" {
-    source      = "${path.module}/../ansible/docker-compose.yml.j2"
-    destination = "/home/ubuntu/docker-compose.yml.j2"
+  provisioner "remote-exec" {
+    inline = [
+      "echo 'Waiting for cloud-init to complete...'",
+      "while [ ! -f /var/lib/cloud/instance/boot-finished ]; do sleep 5; done",
+      "echo 'cloud-init complete.'"
+    ]
 
     connection {
       type        = "ssh"
@@ -165,14 +147,73 @@ resource "null_resource" "copy_playbook" {
   }
 }
 
-resource "null_resource" "run_ansible" {
-  depends_on = [null_resource.copy_playbook]
+resource "null_resource" "prepare_directories" {
+  depends_on = [null_resource.wait_for_cloud_init]
 
   provisioner "remote-exec" {
     inline = [
-      "until command -v ansible-playbook >/dev/null 2>&1; do sleep 5; done",
-      "while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do sleep 5; done",
-      "sudo ansible-playbook -i localhost, /home/ubuntu/install_docker_and_nautobot.yaml --connection=local -e nautobot_allowed_hosts=${chomp(data.http.my_ip.response_body)}"
+      "mkdir -p /home/ubuntu/chi-nog-12/ansible",
+      "mkdir -p /home/ubuntu/chi-nog-12/docker/nautobot"
+    ]
+
+    connection {
+      type        = "ssh"
+      user        = "ubuntu"
+      private_key = file("~/.ssh/jonhowe-chinogdemo12.pem")
+      host        = aws_instance.nautobot_host.public_ip
+    }
+  }
+}
+
+resource "null_resource" "copy_project_files" {
+  depends_on = [null_resource.prepare_directories]
+
+  provisioner "file" {
+    source      = "${path.module}/../ansible/deploy_nautobot_lab.yaml"
+    destination = "/home/ubuntu/chi-nog-12/ansible/deploy_nautobot_lab.yaml"
+
+    connection {
+      type        = "ssh"
+      user        = "ubuntu"
+      private_key = file("~/.ssh/jonhowe-chinogdemo12.pem")
+      host        = aws_instance.nautobot_host.public_ip
+    }
+  }
+
+  provisioner "file" {
+    source      = "${path.module}/../ansible/ansible.cfg"
+    destination = "/home/ubuntu/chi-nog-12/ansible/ansible.cfg"
+
+    connection {
+      type        = "ssh"
+      user        = "ubuntu"
+      private_key = file("~/.ssh/jonhowe-chinogdemo12.pem")
+      host        = aws_instance.nautobot_host.public_ip
+    }
+  }
+
+  provisioner "file" {
+    source      = "${path.module}/../docker/nautobot/docker-compose.yml"
+    destination = "/home/ubuntu/chi-nog-12/docker/nautobot/docker-compose.yml"
+
+    connection {
+      type        = "ssh"
+      user        = "ubuntu"
+      private_key = file("~/.ssh/jonhowe-chinogdemo12.pem")
+      host        = aws_instance.nautobot_host.public_ip
+    }
+  }
+}
+
+resource "null_resource" "run_remote_ansible" {
+  depends_on = [null_resource.copy_project_files]
+
+  provisioner "remote-exec" {
+    inline = [
+      "cd /home/ubuntu/chi-nog-12",
+      "/usr/bin/ansible-playbook --version",
+      "/usr/bin/docker-compose --version",
+      "/usr/bin/ansible-playbook -i localhost, ansible/deploy_nautobot_lab.yaml --connection=local"
     ]
 
     connection {
