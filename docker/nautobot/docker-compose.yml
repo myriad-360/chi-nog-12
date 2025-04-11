@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  nautobot:
+    image: networktocode/nautobot-lab
+    container_name: nautobot
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
