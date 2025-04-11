@@ -4,7 +4,7 @@ This project provisions and configures a fully automated Nautobot lab using Terr
 
 ## Project Structure
 
-\```
+```
 .
 ├── LICENSE
 ├── README.md
@@ -23,7 +23,7 @@ This project provisions and configures a fully automated Nautobot lab using Terr
 │   ├── terraform.tfstate.backup                      # State backup
 │   └── variables.tf                                  # Terraform input variable declarations
 └── terraform.tfstate                                 # Root-level TF state link
-\```
+```
 
 ## Overview
 
@@ -45,16 +45,16 @@ This project automates the provisioning and configuration of a Nautobot instance
 
 1. **Clone the repo**
 
-   \```bash
+   ```bash
    git clone https://github.com/your-org/chi-nog-12.git
    cd chi-nog-12
-   \```
+   ```
 
 2. **Create `terraform/chinog12.auto.tfvars`**
 
    Example:
 
-   \```hcl
+   ```hcl
    aws_region     = "us-east-2"
    aws_access_key = "your-access-key"
    aws_secret_key = "your-secret-key"
@@ -62,33 +62,33 @@ This project automates the provisioning and configuration of a Nautobot instance
    key_name       = "your-keypair-name"
    vpc_name       = ""
    subnet_name    = ""
-   \```
+   ```
 
 3. **Create `ansible/nautobot-superuser-vars.yml`**
 
    This file should not be checked into version control. Example:
 
-   \```yaml
+   ```yaml
    nautobot_superuser_name: admin
    nautobot_superuser_email: admin@example.com
    nautobot_superuser_password: admin
-   \```
+   ```
 
 4. **Initialize and apply Terraform**
 
-   \```bash
+   ```bash
    cd terraform
    terraform init
    terraform apply
-   \```
+   ```
 
 5. **Access Nautobot**
 
    After deployment, Terraform will output the instance's public IP. Open:
 
-   \```
+   ```
    http://<public-ip>:8000
-   \```
+   ```
 
 ## Notes
 
