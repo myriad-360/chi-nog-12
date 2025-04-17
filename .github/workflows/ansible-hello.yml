@@ -10,16 +10,16 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
-    - name: Create SSH key
+
+    - name: Set up SSH key
       run: |
         echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
         chmod 600 key.pem
 
-    - name: Run Ansible playbook from GitHub Actions against EC2
+    - name: Run Ansible playbook remotely
       run: |
         ansible-playbook ansible/ansible-hello-world-via-actions.yml \
-          -i "${{ secrets.EC2_HOST }}," \
+          -i "${{ vars.EC2_HOST }}," \
           --user ${{ secrets.EC2_USER }} \
           --private-key key.pem \
           -e "ansible_python_interpreter=/usr/bin/python3"
