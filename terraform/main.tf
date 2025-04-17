@@ -138,7 +138,7 @@ resource "aws_instance" "nautobot_host" {
                 EOF 
 
   tags = {
-    Name = "nautobot-demo"             # Tag for the instance.
+    Name = "chinog-nautobot-demo"             # Tag for the instance.
   }
 }
 
@@ -220,6 +220,18 @@ resource "null_resource" "copy_project_files" {
       host        = aws_instance.nautobot_host.public_ip # Public IP of the instance.
     }
   }
+
+  provisioner "file" {
+    source      = "${path.module}/../ansible/nautobot-superuser-vars.yml"
+    destination = "/home/ubuntu/chi-nog-12/ansible/nautobot-superuser-vars.yml"
+
+    connection {
+      type        = "ssh"
+      user        = "ubuntu"
+      private_key = file("~/.ssh/jonhowe-chinogdemo12.pem")
+      host        = aws_instance.nautobot_host.public_ip
+    }
+  }
 }
 
 # Null resource to run the Ansible playbook on the instance.
@@ -229,8 +241,8 @@ resource "null_resource" "run_remote_ansible" {
   provisioner "remote-exec" {
     inline = [
       "cd /home/ubuntu/chi-nog-12", # Change to project directory.
-      "/usr/bin/ansible-playbook --version", # Check Ansible version.
-      "/usr/bin/docker-compose --version", # Check Docker Compose version.
+      # "/usr/bin/ansible-playbook --version", # Check Ansible version.
+      # "/usr/bin/docker-compose --version", # Check Docker Compose version.
       "/usr/bin/ansible-playbook -i localhost, ansible/deploy_nautobot_lab.yaml --connection=local" # Run Ansible playbook.
     ]
 
@@ -241,6 +253,63 @@ resource "null_resource" "run_remote_ansible" {
       host        = aws_instance.nautobot_host.public_ip # Public IP of the instance.
     }
   }
+}
+
+# Security group for the web server
+resource "aws_security_group" "web" {
+  name        = "webserver-sg"
+  description = "Allow SSH and HTTP"
+  vpc_id      = local.vpc_id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["${chomp(data.http.my_ip.response_body)}/32"]
+  }
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# EC2 instance acting as a simple web server
+resource "aws_instance" "web_host" {
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = var.web_instance_type
+  key_name                    = var.key_name
+  subnet_id                   = local.subnet_id
+  vpc_security_group_ids      = [aws_security_group.web.id]
+  associate_public_ip_address = true
+
+  user_data = <<-EOF
+                #!/bin/bash
+                apt-get update
+                apt-get install -y nginx
+                systemctl enable nginx
+                systemctl start nginx
+                echo "<h1>Web Server Up and Running</h1>" > /var/www/html/index.html
+              EOF
+
+  tags = {
+    Name = "chinog-web-server"
+  }
+}
+
+# Output the IP address of the web server
+output "web_server_ip" {
+  value = aws_instance.web_host.public_ip
+  description = "Public IP of the web server"
 }
 
 # Output to display the public IP of the Nautobot host instance.
