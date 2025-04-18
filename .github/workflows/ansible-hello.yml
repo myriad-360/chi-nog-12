@@ -34,6 +34,12 @@ jobs:
           --filters "Name=tag:Name,Values=chi-nog-12-pa" \
           --query "Vpcs[0].VpcId" \
           --output text)
+    
+        if [[ "$vpc_id" == "None" ]]; then
+          echo "No VPC found with tag Name=chi-nog-12-pa"
+          exit 1
+        fi
+    
         echo "id=$vpc_id" >> "$GITHUB_OUTPUT"
 
     - name: Get SG ID from VPC
