@@ -27,10 +27,28 @@ jobs:
       id: ip
       run: echo "ip=$(curl -s https://api.ipify.org)" >> "$GITHUB_OUTPUT"
 
+    - name: Get VPC ID by Name tag
+      id: vpc
+      run: |
+        vpc_id=$(aws ec2 describe-vpcs \
+          --filters "Name=tag:Name,Values=chi-nog-12-pa" \
+          --query "Vpcs[0].VpcId" \
+          --output text)
+        echo "id=$vpc_id" >> "$GITHUB_OUTPUT"
+
+    - name: Get SG ID from VPC
+      id: sg
+      run: |
+        sg_id=$(aws ec2 describe-security-groups \
+          --filters "Name=group-name,Values=nautobot-sg" "Name=vpc-id,Values=${{ steps.vpc.outputs.id }}" \
+          --query "SecurityGroups[0].GroupId" \
+          --output text)
+        echo "id=$sg_id" >> "$GITHUB_OUTPUT"
+
     - name: Authorize SSH from runner IP
       run: |
         aws ec2 authorize-security-group-ingress \
-          --group-id ${{ vars.EC2_SG_ID }} \
+          --group-id ${{ steps.sg.outputs.id }} \
           --protocol tcp \
           --port 22 \
           --cidr ${{ steps.ip.outputs.ip }}/32 \
