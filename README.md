@@ -1,3 +1,4 @@
+[![Ansible "Hello World" Against EC2 Instance](https://github.com/myriad-360/chi-nog-12/actions/workflows/ansible-hello.yml/badge.svg)](https://github.com/myriad-360/chi-nog-12/actions/workflows/ansible-hello.yml)
 # chi-nog-12
 
 This project provisions and configures a fully automated Nautobot lab using Terraform and Ansible. The stack consists of an AWS EC2 instance, Docker Compose-based Nautobot deployment, and a bootstrapped superuser.
