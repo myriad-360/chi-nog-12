@@ -66,6 +66,7 @@ jobs:
           -i "${{ vars.EC2_HOST }}," \
           --user ${{ secrets.EC2_USER }} \
           --private-key key.pem \
+          --ssh-extra-args "-o StrictHostKeyChecking=no" \
           -e "ansible_python_interpreter=/usr/bin/python3"
       env:
         ANSIBLE_HOST_KEY_CHECKING: "False"
