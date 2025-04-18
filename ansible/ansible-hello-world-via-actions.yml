@@ -1,0 +1,13 @@
+---
+- name: Hello World with Context
+  hosts: all
+  gather_facts: yes
+
+  tasks:
+    - name: Print a friendly message
+      debug:
+        msg: |
+          🎉 Hello, World from Ansible!
+          🖥️ Hostname: {{ ansible_hostname }}
+          🕒 Time: {{ ansible_date_time.iso8601 }}
+          🌐 Private IP: {{ ansible_default_ipv4.address }}
