@@ -1,20 +1,25 @@
 name: Run Ansible Hello World on EC2
+# The name of the workflow, displayed in the GitHub Actions UI.
 
 on:
   workflow_dispatch:
+  # This workflow can be triggered manually using the "Run workflow" button in the GitHub Actions UI.
 
 jobs:
   run-ansible:
     runs-on: ubuntu-latest
+    # The job will run on the latest version of an Ubuntu-based GitHub-hosted runner.
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      # Checks out the repository code so it can be used in subsequent steps.
 
     - name: Set up SSH key
       run: |
         echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
         chmod 600 key.pem
+      # Creates an SSH private key file from a GitHub secret and sets appropriate permissions.
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
@@ -22,10 +27,12 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ vars.AWS_REGION }}
+      # Configures AWS CLI credentials using secrets and a predefined AWS region.
 
     - name: Get GitHub runner's public IP
       id: ip
       run: echo "ip=$(curl -s https://api.ipify.org)" >> "$GITHUB_OUTPUT"
+      # Retrieves the public IP address of the GitHub runner and stores it in the workflow output.
 
     - name: Get VPC ID by Name tag
       id: vpc
@@ -34,13 +41,14 @@ jobs:
           --filters "Name=tag:Name,Values=chi-nog-12-pa" \
           --query "Vpcs[0].VpcId" \
           --output text)
-    
         if [[ "$vpc_id" == "None" ]]; then
           echo "No VPC found with tag Name=chi-nog-12-pa"
           exit 1
         fi
-    
         echo "id=$vpc_id" >> "$GITHUB_OUTPUT"
+      # Queries AWS to find the VPC ID associated with a specific Name tag.
+      # Exits the workflow if no VPC is found with the specified tag.
+      # Outputs the VPC ID for use in subsequent steps.
 
     - name: Get SG ID from VPC
       id: sg
