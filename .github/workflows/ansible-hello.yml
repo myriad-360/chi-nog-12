@@ -16,6 +16,26 @@ jobs:
         echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
         chmod 600 key.pem
 
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ vars.AWS_REGION }}
+
+    - name: Get GitHub runner's public IP
+      id: ip
+      run: echo "ip=$(curl -s https://api.ipify.org)" >> "$GITHUB_OUTPUT"
+
+    - name: Authorize SSH from runner IP
+      run: |
+        aws ec2 authorize-security-group-ingress \
+          --group-id ${{ vars.EC2_SG_ID }} \
+          --protocol tcp \
+          --port 22 \
+          --cidr ${{ steps.ip.outputs.ip }}/32 \
+          --region ${{ vars.AWS_REGION }} || true
+
     - name: Run Ansible playbook remotely
       run: |
         ansible-playbook ansible/ansible-hello-world-via-actions.yml \
