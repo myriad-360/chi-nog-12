@@ -82,20 +82,12 @@ resource "aws_security_group" "nautobot" {
   description = "Allow SSH and Nautobot Web" # Description of the security group.
   vpc_id      = local.vpc_id           # VPC ID to associate the security group with.
 
-  dynamic "ingress" {
-    for_each = [
-      "20.205.243.166/32",
-      "185.199.108.0/22",
-      "140.82.112.0/20",
-      "143.55.64.0/20"
-    ]
-    content {
-      from_port   = 22
-      to_port     = 22
-      protocol    = "tcp"
-      cidr_blocks = [ingress.value]
-      description = "Allow SSH from GitHub Actions"
-    }
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["${chomp(data.http.my_ip.response_body)}/32"]
+    description = "Allow SSH from user IP"
   }
 
   ingress {
@@ -269,20 +261,12 @@ resource "aws_security_group" "web" {
   description = "Allow SSH and HTTP"
   vpc_id      = local.vpc_id
 
-  dynamic "ingress" {
-    for_each = [
-      "20.205.243.166/32",
-      "185.199.108.0/22",
-      "140.82.112.0/20",
-      "143.55.64.0/20"
-    ]
-    content {
-      from_port   = 22
-      to_port     = 22
-      protocol    = "tcp"
-      cidr_blocks = [ingress.value]
-      description = "Allow SSH from GitHub Actions"
-    }
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["${chomp(data.http.my_ip.response_body)}/32"]
+    description = "Allow SSH from user IP"
   }
 
   ingress {
