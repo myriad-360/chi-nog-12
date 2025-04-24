@@ -1,0 +1,32 @@
+---
+- name: Gather system info
+  hosts: "firewall"
+  connection: local
+
+  vars:
+    device:
+      ip_address: "{{ ip_address }}"
+      username: "{{ username }}"
+      password: "{{ password }}"
+
+  collections:
+    - paloaltonetworks.panos
+
+  tasks:
+    - name: Gather facts for device
+      paloaltonetworks.panos.panos_facts:
+        provider: "{{ device }}"
+
+    - name: Display information
+      ansible.builtin.debug:
+        msg:
+          - "Hostname: {{ ansible_facts['net_hostname'] }}"
+          - "Serial: {{ ansible_facts['net_serial'] }}"
+          - "Model: {{ ansible_facts['net_model'] }}"
+          - "Version: {{ ansible_facts['net_version'] }}"
+          - "Uptime: {{ ansible_facts['net_uptime'] }}"
+          - "HA Enabled: {{ ansible_facts['net_ha_enabled'] }}"
+          - "HA Type: {{ ansible_facts['net_ha_localmode'] }}"
+          - "HA Status: {{ ansible_facts['net_ha_localstate'] }}"
+          - "Multi-VSYS: {{ ansible_facts['net_multivsys'] }}"
+          - "{{ ansible_facts['net_session_usage'] }} out of {{ ansible_facts['net_session_max'] }} sessions in use"

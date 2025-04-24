@@ -28,3 +28,4 @@ terraform/chinog12.auto.tfvars
 *.key
 *.pub
 ansible/nautobot-superuser-vars.yml
+ansible/palo/host_vars/palo-secrets.yml
