@@ -27,5 +27,8 @@ terraform/chinog12.auto.tfvars
 *.pem
 *.key
 *.pub
+
+
 ansible/nautobot-superuser-vars.yml
 ansible/palo/host_vars/palo-secrets.yml
+jira/.env
