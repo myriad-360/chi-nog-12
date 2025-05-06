@@ -67,21 +67,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download artifacts
+      - name: Download artifacts (optional)
         uses: actions/download-artifact@v4
         with:
           name: jira-artifacts
           path: artifacts
+        continue-on-error: true
+
+      - name: Check for downloaded artifacts
+        id: check-artifacts
+        run: |
+          shopt -s nullglob
+          files=(artifacts/*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=true"  >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip deploy if no artifacts
+        if: steps.check-artifacts.outputs.found == 'false'
+        run: |
+          echo "⚠️  No Jira artifacts found. Skipping deploy."
+          exit 0
 
       - name: Checkout repo
+        if: steps.check-artifacts.outputs.found == 'true'
         uses: actions/checkout@v4
 
       - name: Set up SSH key
+        if: steps.check-artifacts.outputs.found == 'true'
         run: |
           echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
           chmod 600 key.pem
 
       - name: Configure AWS credentials
+        if: steps.check-artifacts.outputs.found == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -89,10 +110,12 @@ jobs:
           aws-region:           ${{ vars.AWS_REGION }}
 
       - name: Get Runner’s Public IP
+        if: steps.check-artifacts.outputs.found == 'true'
         id: ip
         run: echo "ip=$(curl -s https://api.ipify.org)" >> "$GITHUB_OUTPUT"
 
       - name: Get VPC ID by Name tag
+        if: steps.check-artifacts.outputs.found == 'true'
         id: vpc
         run: |
           vpc_id=$(aws ec2 describe-vpcs \
@@ -101,6 +124,7 @@ jobs:
           echo "id=$vpc_id" >> "$GITHUB_OUTPUT"
 
       - name: Get Security Group ID
+        if: steps.check-artifacts.outputs.found == 'true'
         id: sg
         run: |
           sg_id=$(aws ec2 describe-security-groups \
@@ -111,6 +135,7 @@ jobs:
           echo "id=$sg_id" >> "$GITHUB_OUTPUT"
 
       - name: Authorize SSH from Runner IP
+        if: steps.check-artifacts.outputs.found == 'true'
         run: |
           aws ec2 authorize-security-group-ingress \
             --group-id ${{ steps.sg.outputs.id }} \
@@ -120,6 +145,7 @@ jobs:
             --region ${{ vars.AWS_REGION }} || true
 
       - name: Run Ansible playbook remotely
+        if: steps.check-artifacts.outputs.found == 'true'
         env:
           ANSIBLE_HOST_KEY_CHECKING: "False"
         run: |
@@ -132,7 +158,7 @@ jobs:
             -e "ansible_python_interpreter=/usr/bin/python3"
 
       - name: Revoke SSH rule from Security Group
-        if: always()
+        if: always() && steps.check-artifacts.outputs.found == 'true'
         run: |
           aws ec2 revoke-security-group-ingress \
             --group-id ${{ steps.sg.outputs.id }} \
