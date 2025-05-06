@@ -1,9 +1,13 @@
 name: Poll JSM tickets & flatten details
 
+# grant contents write so commits & pushes succeed
+permissions:
+  contents: write
+
 on:
   schedule:
-    - cron: '*/5 * * * *'      # every 5 minutes
-  workflow_dispatch:          # manual trigger
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 jobs:
   poll-and-flatten:
@@ -12,6 +16,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # persist the GITHUB_TOKEN so we can push back
+          persist-credentials: true
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -29,10 +36,8 @@ jobs:
 
       - name: Run Jira polling script
         env:
-          # secrets (sensitive)
-          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-          # variables (non‑sensitive)
+          JIRA_EMAIL:   ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN:   ${{ secrets.JIRA_TOKEN }}
           JIRA_PROJECT: ${{ vars.JIRA_PROJECT }}
           JIRA_STATUS:  ${{ vars.JIRA_STATUS }}
           JIRA_SITE:    ${{ vars.JIRA_SITE }}
@@ -45,4 +50,4 @@ jobs:
           git config user.email "actions@github.com"
           git add .processed_issues
           git commit -m "chore: update processed issues [skip ci]" || echo "Nothing to commit"
-          git push || echo "Push failed; maybe read‑only"
+          git push
