@@ -1,14 +1,12 @@
 name: Poll Jira & Deploy Artifact to EC2
 
-# 1) Schedule + manual trigger
 on:
   schedule:
-    - cron: '*/5 * * * *'
-  workflow_dispatch:
+    - cron: '*/5 * * * *'      # every 5 minutes
+  workflow_dispatch:          # manual trigger
 
-# 2) Grant push rights (for memory file, if you ever need it)
 permissions:
-  contents: write
+  contents: write              # allow updating .processed_issues
 
 jobs:
   # ──────────────────────────────────────────────────────────────────────
@@ -27,7 +25,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Python deps
+      - name: Install Python dependencies
         run: |
           pip install requests python-dotenv
 
@@ -38,30 +36,39 @@ jobs:
 
       - name: Run Jira polling script
         env:
-          # secrets (sensitive)
+          # sensitive secrets
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-          # variables (non‑sensitive)
+          # non-sensitive variables
           JIRA_PROJECT: ${{ vars.JIRA_PROJECT }}
           JIRA_STATUS:  ${{ vars.JIRA_STATUS }}
           JIRA_SITE:    ${{ vars.JIRA_SITE }}
         run: python jira/jira_polling_script.py
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: jira-artifacts
           path: artifacts/*.json
 
+      - name: Commit & push memory update
+        if: success()
+        run: |
+          git config user.name  "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add .processed_issues
+          git commit -m "chore: update processed issues [skip ci]" || echo "Nothing to commit"
+          git push
+
   # ──────────────────────────────────────────────────────────────────────
   # Job B: deploy artifacts to EC2 & run Ansible
   deploy-to-ec2:
-    runs-on: ubuntu-latest
     needs: poll-and-flatten
+    runs-on: ubuntu-latest
 
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: jira-artifacts
           path: artifacts
