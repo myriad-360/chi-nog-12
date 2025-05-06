@@ -1,0 +1,48 @@
+name: Poll JSM tickets & flatten details
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'      # every 5 minutes
+  workflow_dispatch:          # manual trigger
+
+jobs:
+  poll-and-flatten:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests python-dotenv
+
+      - name: Prepare artifacts & memory
+        run: |
+          mkdir -p artifacts
+          touch .processed_issues
+
+      - name: Run Jira polling script
+        env:
+          # secrets (sensitive)
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          # variables (non‑sensitive)
+          JIRA_PROJECT: ${{ vars.JIRA_PROJECT }}
+          JIRA_STATUS:  ${{ vars.JIRA_STATUS }}
+          JIRA_SITE:    ${{ vars.JIRA_SITE }}
+        run: python jira/jira_polling_script.py
+
+      - name: Commit & push memory update
+        if: success()
+        run: |
+          git config user.name  "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add .processed_issues
+          git commit -m "chore: update processed issues [skip ci]" || echo "Nothing to commit"
+          git push || echo "Push failed; maybe read‑only"
