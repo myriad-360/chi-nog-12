@@ -1,0 +1,135 @@
+name: Poll Jira & Deploy Artifact to EC2
+
+# 1) Schedule + manual trigger
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+# 2) Grant push rights (for memory file, if you ever need it)
+permissions:
+  contents: write
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────
+  # Job A: poll Jira & flatten into artifacts/*.json
+  poll-and-flatten:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python deps
+        run: |
+          pip install requests python-dotenv
+
+      - name: Prepare artifacts & memory
+        run: |
+          mkdir -p artifacts
+          touch .processed_issues
+
+      - name: Run Jira polling script
+        env:
+          # secrets (sensitive)
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          # variables (non‑sensitive)
+          JIRA_PROJECT: ${{ vars.JIRA_PROJECT }}
+          JIRA_STATUS:  ${{ vars.JIRA_STATUS }}
+          JIRA_SITE:    ${{ vars.JIRA_SITE }}
+        run: python jira/jira_polling_script.py
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: jira-artifacts
+          path: artifacts/*.json
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Job B: deploy artifacts to EC2 & run Ansible
+  deploy-to-ec2:
+    runs-on: ubuntu-latest
+    needs: poll-and-flatten
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: jira-artifacts
+          path: artifacts
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
+          chmod 600 key.pem
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:           ${{ vars.AWS_REGION }}
+
+      - name: Get Runner’s Public IP
+        id: ip
+        run: echo "ip=$(curl -s https://api.ipify.org)" >> "$GITHUB_OUTPUT"
+
+      - name: Get VPC ID by Name tag
+        id: vpc
+        run: |
+          vpc_id=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=${{ vars.VPC_NAME }}" \
+            --query "Vpcs[0].VpcId" --output text)
+          echo "id=$vpc_id" >> "$GITHUB_OUTPUT"
+
+      - name: Get Security Group ID
+        id: sg
+        run: |
+          sg_id=$(aws ec2 describe-security-groups \
+            --filters \
+              "Name=group-name,Values=${{ vars.SG_NAME }}" \
+              "Name=vpc-id,Values=${{ steps.vpc.outputs.id }}" \
+            --query "SecurityGroups[0].GroupId" --output text)
+          echo "id=$sg_id" >> "$GITHUB_OUTPUT"
+
+      - name: Authorize SSH from Runner IP
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ steps.sg.outputs.id }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr ${{ steps.ip.outputs.ip }}/32 \
+            --region ${{ vars.AWS_REGION }} || true
+
+      - name: Run Ansible playbook remotely
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        run: |
+          ansible-playbook ansible/ansible-hello-world-via-actions.yml \
+            -i "${{ vars.EC2_HOST }}," \
+            --user ${{ secrets.EC2_USER }} \
+            --private-key key.pem \
+            --ssh-extra-args "-o StrictHostKeyChecking=no" \
+            -e "artifact_path=./artifacts" \
+            -e "ansible_python_interpreter=/usr/bin/python3"
+
+      - name: Revoke SSH rule from Security Group
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ steps.sg.outputs.id }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr ${{ steps.ip.outputs.ip }}/32 \
+            --region ${{ vars.AWS_REGION }} || true
