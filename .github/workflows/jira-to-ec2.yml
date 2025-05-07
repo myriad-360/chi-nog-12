@@ -1,143 +1,82 @@
-name: Poll Jira & Deploy Artifact to EC2
+name: Poll Jira & Send Artifact to EC2
 
 on:
   schedule:
-    - cron: '*/5 * * * *'      # every 5 minutes
-  workflow_dispatch:          # manual trigger
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 permissions:
-  contents: write              # allow updating .processed_issues
+  contents: write
 
 jobs:
-  # Job A: Poll Jira & upload artifacts
-  poll-and-flatten:
+  poll-and-push:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: true
 
-      - name: Set up Python 3.11
+    steps:
+      # 1) Grab your code & set up Python
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: pip install requests python-dotenv
 
-      - name: Prepare artifacts & memory
-        run: |
-          mkdir -p artifacts
-          touch .processed_issues
-
-      - name: Run Jira polling script
+      # 2) Poll Jira & write JSON to artifacts/
+      - name: Poll Jira into JSON
         env:
           JIRA_EMAIL:   ${{ secrets.JIRA_EMAIL }}
           JIRA_TOKEN:   ${{ secrets.JIRA_TOKEN }}
           JIRA_PROJECT: ${{ vars.JIRA_PROJECT }}
           JIRA_STATUS:  ${{ vars.JIRA_STATUS }}
           JIRA_SITE:    ${{ vars.JIRA_SITE }}
-        run: python jira/jira_polling_script.py
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: jira-artifacts
-          path: artifacts/*.json
-
-      - name: Commit & push memory update
-        if: success()
         run: |
-          git config user.name  "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add .processed_issues
-          git commit -m "chore: update processed issues [skip ci]" || echo "Nothing to commit"
-          git push
+          mkdir -p artifacts
+          python jira/jira_polling_script.py
 
-  # Job B: Download artifact and deploy to EC2
-  deploy-to-ec2:
-    needs: poll-and-flatten
-    runs-on: ubuntu-latest
-    steps:
-      - name: Ensure artifacts dir exists
-        run: mkdir -p artifacts
-
-      - name: Download jira-artifacts artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: jira-artifacts
-          path: artifacts
-
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: true
-
-      - name: Set up AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:           ${{ vars.AWS_REGION }}
-
-      - name: Get EC2 Public IP by Name tag
+      # 3) Look up your EC2’s public IP by Name tag
+      - name: Get EC2 public IP
         id: ec2_ip
         run: |
-          INSTANCE_NAME="${{ vars.EC2_INSTANCE_NAME }}"
           ip=$(aws ec2 describe-instances \
-            --filters Name=tag:Name,Values=${INSTANCE_NAME} \
-                      Name=instance-state-name,Values=running \
+            --region ${{ vars.AWS_REGION }} \
+            --filters \
+              "Name=tag:Name,Values=${{ vars.EC2_INSTANCE_NAME }}" \
+              "Name=instance-state-name,Values=running" \
             --query "Reservations[0].Instances[0].PublicIpAddress" \
             --output text)
-          if [[ -z "$ip" || "$ip" == "None" ]]; then
-            echo "No running instance with Name=${INSTANCE_NAME}" >&2
-            exit 1
-          fi
-          echo "ip=$ip" >> "$GITHUB_OUTPUT"
+          echo "ip=$ip" >> $GITHUB_OUTPUT
 
+      # 4) Drop your SSH key onto the runner
       - name: Set up SSH key
         run: |
           echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
           chmod 600 key.pem
 
-      - name: Authorize SSH from Runner IP
+      # 5) Copy the artifact via scp
+      - name: Copy artifact to EC2
         run: |
-          runner_ip=$(curl -s https://api.ipify.org)
-          aws ec2 authorize-security-group-ingress \
-            --group-id ${{ vars.SG_ID }} \
-            --protocol tcp \
-            --port 22 \
-            --cidr ${runner_ip}/32 \
-            --region ${{ vars.AWS_REGION }} || true
-
-      - name: Copy & print artifact via Ansible
-        env:
-          ANSIBLE_HOST_KEY_CHECKING: "False"
-        run: |
+          # pick the first JSON file
           shopt -s nullglob
           files=(artifacts/*.json)
-          ARTIFACT="${files[0]}"
-          if [[ -z "$ARTIFACT" ]]; then
-            echo "No artifact JSON found" >&2
+          ART="${files[0]}"
+          if [[ -z "$ART" ]]; then
+            echo "❌ No JSON artifact to send" >&2
             exit 1
           fi
-          TARGET_IP=${{ steps.ec2_ip.outputs.ip }}
-          echo "Copying $ARTIFACT to $TARGET_IP and printing via Ansible"
-          ansible-playbook ansible/print-artifact.yml \
-            -i "${TARGET_IP}," \
-            --user ${{ secrets.EC2_USER }} \
-            --private-key key.pem \
-            --ssh-extra-args "-o StrictHostKeyChecking=no" \
-            -e "artifact_src=${ARTIFACT}" \
-            -e "ansible_python_interpreter=/usr/bin/python3"
 
-      - name: Revoke SSH rule from Security Group
+          echo "▶ scp $ART to ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }}:/tmp/"
+          scp -o StrictHostKeyChecking=no -i key.pem "$ART" \
+            ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }}:/tmp/
+
+      # 6) SSH in and print the file
+      - name: SSH & print artifact
         run: |
-          runner_ip=$(curl -s https://api.ipify.org)
-          aws ec2 revoke-security-group-ingress \
-            --group-id ${{ vars.SG_ID }} \
-            --protocol tcp \
-            --port 22 \
-            --cidr ${runner_ip}/32 \
-            --region ${{ vars.AWS_REGION }} || true
+          BASENAME=$(basename artifacts/*.json)
+          echo "▶ ssh in and cat /tmp/$BASENAME"
+          ssh -o StrictHostKeyChecking=no -i key.pem \
+            ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} \
+            "cat /tmp/$BASENAME"
