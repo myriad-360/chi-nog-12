@@ -2,37 +2,29 @@ name: Poll Jira & Deploy Artifact to EC2
 
 on:
   schedule:
-    - cron: '*/5 * * * *'      # every 5 minutes
-  workflow_dispatch:          # manual trigger
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 permissions:
-  contents: write              # allow updating .processed_issues
+  contents: write
 
 jobs:
-  # ──────────────────────────────────────────────────────────────────────
-  # Job A: poll Jira & flatten into artifacts/*.json
   poll-and-flatten:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: true
+      - uses: actions/checkout@v4
+        with: persist-credentials: true
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - uses: actions/setup-python@v5
+        with: python-version: '3.11'
 
-      - name: Install Python dependencies
-        run: |
-          pip install requests python-dotenv
+      - run: pip install requests python-dotenv
+        name: Install Python dependencies
 
-      - name: Prepare artifacts & memory
-        run: |
+      - run: |
           mkdir -p artifacts
           touch .processed_issues
+        name: Prepare artifacts & memory
 
       - name: Run Jira polling script
         env:
@@ -58,23 +50,20 @@ jobs:
           git commit -m "chore: update processed issues [skip ci]" || echo "Nothing to commit"
           git push
 
-  # ──────────────────────────────────────────────────────────────────────
-  # Job B: deploy artifacts to EC2 & run Ansible
   deploy-to-ec2:
     needs: poll-and-flatten
     runs-on: ubuntu-latest
 
     steps:
-      # ensure artifacts directory exists
-      - name: Ensure artifacts dir exists
-        run: mkdir -p artifacts
+      - run: mkdir -p artifacts
+        name: Ensure artifacts dir exists
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           name: jira-artifacts
           path: artifacts
-          run-id: ${{ github.run_id }}   # ← explicitly pull from this same run
+          if-no-files-found: warn
 
       - name: Check for downloaded artifacts
         id: check-artifacts
@@ -93,11 +82,9 @@ jobs:
           echo "⚠️  No Jira artifacts found. Skipping deploy."
           exit 0
 
-      - name: Checkout repo
+      - uses: actions/checkout@v4
         if: steps.check-artifacts.outputs.found == 'true'
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: true
+        with: persist-credentials: true
 
       - name: Set up AWS credentials
         if: steps.check-artifacts.outputs.found == 'true'
@@ -124,15 +111,13 @@ jobs:
           fi
           echo "ip=$ip" >> "$GITHUB_OUTPUT"
 
-      - name: Set up SSH key
-        if: steps.check-artifacts.outputs.found == 'true'
-        run: |
+      - run: |
           echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
           chmod 600 key.pem
-
-      - name: Authorize SSH from Runner IP
         if: steps.check-artifacts.outputs.found == 'true'
-        run: |
+        name: Set up SSH key
+
+      - run: |
           runner_ip=$(curl -s https://api.ipify.org)
           aws ec2 authorize-security-group-ingress \
             --group-id ${{ vars.SG_ID }} \
@@ -140,6 +125,8 @@ jobs:
             --port 22 \
             --cidr ${runner_ip}/32 \
             --region ${{ vars.AWS_REGION }} || true
+        if: steps.check-artifacts.outputs.found == 'true'
+        name: Authorize SSH from Runner IP
 
       - name: Copy & print artifact via Ansible
         if: steps.check-artifacts.outputs.found == 'true'
@@ -157,9 +144,7 @@ jobs:
             -e "artifact_src=${ARTIFACT}" \
             -e "ansible_python_interpreter=/usr/bin/python3"
 
-      - name: Revoke SSH rule from Security Group
-        if: steps.check-artifacts.outputs.found == 'true'
-        run: |
+      - run: |
           runner_ip=$(curl -s https://api.ipify.org)
           aws ec2 revoke-security-group-ingress \
             --group-id ${{ vars.SG_ID }} \
@@ -167,3 +152,5 @@ jobs:
             --port 22 \
             --cidr ${runner_ip}/32 \
             --region ${{ vars.AWS_REGION }} || true
+        if: steps.check-artifacts.outputs.found == 'true'
+        name: Revoke SSH rule
