@@ -1,0 +1,21 @@
+---
+- hosts: all
+  gather_facts: false
+  vars:
+    artifact_src: ""    # must be passed via -e
+    remote_dest: /tmp/remote_artifact.json
+
+  tasks:
+    - name: Copy artifact to EC2
+      copy:
+        src: "{{ artifact_src }}"
+        dest: "{{ remote_dest }}"
+        mode: '0644'
+
+    - name: Print artifact contents
+      command: cat "{{ remote_dest }}"
+      register: artifact_output
+
+    - name: Show artifact on GitHub log
+      debug:
+        var: artifact_output.stdout
