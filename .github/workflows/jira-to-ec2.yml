@@ -36,10 +36,8 @@ jobs:
 
       - name: Run Jira polling script
         env:
-          # sensitive secrets
-          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-          # non-sensitive variables
+          JIRA_EMAIL:   ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN:   ${{ secrets.JIRA_TOKEN }}
           JIRA_PROJECT: ${{ vars.JIRA_PROJECT }}
           JIRA_STATUS:  ${{ vars.JIRA_STATUS }}
           JIRA_SITE:    ${{ vars.JIRA_SITE }}
@@ -91,17 +89,7 @@ jobs:
           echo "⚠️  No Jira artifacts found. Skipping deploy."
           exit 0
 
-      - name: Checkout repo
-        if: steps.check-artifacts.outputs.found == 'true'
-        uses: actions/checkout@v4
-
-      - name: Set up SSH key
-        if: steps.check-artifacts.outputs.found == 'true'
-        run: |
-          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
-          chmod 600 key.pem
-
-      - name: Configure AWS credentials
+      - name: Set up AWS credentials
         if: steps.check-artifacts.outputs.found == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -109,44 +97,40 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region:           ${{ vars.AWS_REGION }}
 
-      - name: Get Runner’s Public IP
+      - name: Get EC2 Public IP by Name tag
         if: steps.check-artifacts.outputs.found == 'true'
-        id: ip
-        run: echo "ip=$(curl -s https://api.ipify.org)" >> "$GITHUB_OUTPUT"
-
-      - name: Get VPC ID by Name tag
-        if: steps.check-artifacts.outputs.found == 'true'
-        id: vpc
+        id: ec2_ip
         run: |
-          vpc_id=$(aws ec2 describe-vpcs \
-            --filters "Name=tag:Name,Values=${{ vars.VPC_NAME }}" \
-            --query "Vpcs[0].VpcId" --output text)
-          echo "id=$vpc_id" >> "$GITHUB_OUTPUT"
-
-      - name: Get Security Group ID
-        if: steps.check-artifacts.outputs.found == 'true'
-        id: sg
-        run: |
-          vpc_id="${{ steps.vpc.outputs.id }}"
-          if [[ -z "$vpc_id" || "$vpc_id" == "None" ]]; then
-            echo "id=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          sg_id=$(aws ec2 describe-security-groups \
+          INSTANCE_NAME="${{ vars.EC2_INSTANCE_NAME }}"
+          echo "▶ Looking up Public IP for instance Name=${INSTANCE_NAME}"
+          ip=$(aws ec2 describe-instances \
             --filters \
-              "Name=group-name,Values=${{ vars.SG_NAME }}" \
-              "Name=vpc-id,Values=$vpc_id" \
-            --query "SecurityGroups[0].GroupId" --output text)
-          echo "id=$sg_id" >> "$GITHUB_OUTPUT"
+              "Name=tag:Name,Values=${INSTANCE_NAME}" \
+              "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].PublicIpAddress" \
+            --output text)
+          if [[ -z "$ip" || "$ip" == "None" ]]; then
+            echo "❌ No running instance found with Name=${INSTANCE_NAME}"
+            exit 1
+          fi
+          echo "ip=$ip" >> "$GITHUB_OUTPUT"
+
+      - name: Set up SSH key
+        if: steps.check-artifacts.outputs.found == 'true'
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
+          chmod 600 key.pem
 
       - name: Authorize SSH from Runner IP
-        if: steps.check-artifacts.outputs.found == 'true' && steps.sg.outputs.id != ''
+        if: steps.check-artifacts.outputs.found == 'true'
+        id: ip
         run: |
+          runner_ip=$(curl -s https://api.ipify.org)
           aws ec2 authorize-security-group-ingress \
-            --group-id ${{ steps.sg.outputs.id }} \
+            --group-id ${{ vars.SG_ID }} \
             --protocol tcp \
             --port 22 \
-            --cidr ${{ steps.ip.outputs.ip }}/32 \
+            --cidr ${runner_ip}/32 \
             --region ${{ vars.AWS_REGION }} || true
 
       - name: Copy & print artifact via Ansible
@@ -154,23 +138,24 @@ jobs:
         env:
           ANSIBLE_HOST_KEY_CHECKING: "False"
         run: |
-          artifact_file=$(ls artifacts/*.json | head -n1)
-          echo ">> Using artifact: $artifact_file"
-
+          ARTIFACT=$(ls artifacts/*.json | head -n1)
+          TARGET_IP=${{ steps.ec2_ip.outputs.ip }}
+          echo "▶ Copying $ARTIFACT to $TARGET_IP and printing via Ansible"
           ansible-playbook ansible/print-artifact.yml \
-            -i "${{ vars.EC2_HOST }}," \
+            -i "${TARGET_IP}," \
             --user ${{ secrets.EC2_USER }} \
             --private-key key.pem \
             --ssh-extra-args "-o StrictHostKeyChecking=no" \
-            -e "artifact_src=${artifact_file}" \
+            -e "artifact_src=${ARTIFACT}" \
             -e "ansible_python_interpreter=/usr/bin/python3"
 
       - name: Revoke SSH rule from Security Group
-        if: steps.check-artifacts.outputs.found == 'true' && steps.sg.outputs.id != ''
+        if: steps.check-artifacts.outputs.found == 'true'
         run: |
+          runner_ip=$(curl -s https://api.ipify.org)
           aws ec2 revoke-security-group-ingress \
-            --group-id ${{ steps.sg.outputs.id }} \
+            --group-id ${{ vars.SG_ID }} \
             --protocol tcp \
             --port 22 \
-            --cidr ${{ steps.ip.outputs.ip }}/32 \
+            --cidr ${runner_ip}/32 \
             --region ${{ vars.AWS_REGION }} || true
