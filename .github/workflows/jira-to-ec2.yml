@@ -82,34 +82,52 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region:           ${{ vars.AWS_REGION }}
 
-      - name: Get EC2 Public IP by Name tag
-        id: ec2_ip
-        run: |
-          INSTANCE_NAME="${{ vars.EC2_INSTANCE_NAME }}"
-          ip=$(aws ec2 describe-instances \
-            --region ${{ vars.AWS_REGION }} \
-            --filters \
-              "Name=tag:Name,Values=${INSTANCE_NAME}" \
-              "Name=instance-state-name,Values=running" \
-            --query "Reservations[0].Instances[0].PublicIpAddress" \
-            --output text)
-          echo "ip=$ip" >> "$GITHUB_OUTPUT"
-
       - name: Set up SSH key
         run: |
           echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
           chmod 600 key.pem
 
-      - name: Authorize SSH from Runner IP
+
+      - name: Get GitHub runner's public IP
+        id: ip
+        run: echo "ip=$(curl -s https://api.ipify.org)" >> "$GITHUB_OUTPUT"
+        # Retrieves the public IP address of the GitHub runner and stores it in the workflow output.
+  
+      - name: Get VPC ID by Name tag
+        id: vpc
         run: |
-          runner_ip=$(curl -s https://api.ipify.org)
+          vpc_id=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=chi-nog-12-pa" \
+            --query "Vpcs[0].VpcId" \
+            --output text)
+          if [[ "$vpc_id" == "None" ]]; then
+            echo "No VPC found with tag Name=chi-nog-12-pa"
+            exit 1
+          fi
+          echo "id=$vpc_id" >> "$GITHUB_OUTPUT"
+        # Queries AWS to find the VPC ID associated with a specific Name tag.
+        # Exits the workflow if no VPC is found with the specified tag.
+        # Outputs the VPC ID for use in subsequent steps.
+    
+      - name: Get SG ID from VPC
+        id: sg
+        run: |
+          sg_id=$(aws ec2 describe-security-groups \
+            --filters "Name=group-name,Values=nautobot-sg" "Name=vpc-id,Values=${{ steps.vpc.outputs.id }}" \
+            --query "SecurityGroups[0].GroupId" \
+            --output text)
+          echo "id=$sg_id" >> "$GITHUB_OUTPUT"
+    
+      - name: Authorize SSH from runner IP
+        run: |
           aws ec2 authorize-security-group-ingress \
-            --group-id ${{ secrets.SG_ID }} \
+            --group-id ${{ steps.sg.outputs.id }} \
             --protocol tcp \
             --port 22 \
-            --cidr ${runner_ip}/32 \
+            --cidr ${{ steps.ip.outputs.ip }}/32 \
             --region ${{ vars.AWS_REGION }} || true
-
+          
+    
       - name: Copy artifact to EC2 via SCP
         run: |
           shopt -s nullglob
