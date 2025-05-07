@@ -60,6 +60,11 @@ jobs:
     needs: poll-and-flatten
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          
       - name: Ensure artifacts dir exists
         run: mkdir -p artifacts
 
@@ -69,10 +74,7 @@ jobs:
           name: jira-artifacts
           path: artifacts
 
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: true
+
 
       - name: Set up AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
