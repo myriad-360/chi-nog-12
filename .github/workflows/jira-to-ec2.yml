@@ -87,7 +87,6 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
           chmod 600 key.pem
 
-
       - name: Get GitHub runner's public IP
         id: ip
         run: echo "ip=$(curl -s https://api.ipify.org)" >> "$GITHUB_OUTPUT"
@@ -118,6 +117,23 @@ jobs:
             --output text)
           echo "id=$sg_id" >> "$GITHUB_OUTPUT"
     
+      - name: Get EC2 Public IP by Name tag
+        id: ec2_ip
+        run: |
+          INSTANCE_NAME="${{ vars.EC2_INSTANCE_NAME }}"
+          echo "Looking up Public IP for instance named: $INSTANCE_NAME"
+          ip=$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:Name,Values=${INSTANCE_NAME}" \
+              "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].PublicIpAddress" \
+            --output text)
+          if [[ -z "$ip" || "$ip" == "None" ]]; then
+            echo "❌ No running instance found with Name=${INSTANCE_NAME}"
+            exit 1
+          fi
+          echo "ip=$ip" >> "$GITHUB_OUTPUT"
+
       - name: Authorize SSH from runner IP
         run: |
           aws ec2 authorize-security-group-ingress \
@@ -127,7 +143,6 @@ jobs:
             --cidr ${{ steps.ip.outputs.ip }}/32 \
             --region ${{ vars.AWS_REGION }} || true
           
-    
       - name: Copy artifact to EC2 via SCP
         run: |
           shopt -s nullglob
