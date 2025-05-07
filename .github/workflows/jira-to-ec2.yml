@@ -2,13 +2,14 @@ name: Poll Jira & Deploy Artifact to EC2
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
-  workflow_dispatch:
+    - cron: '*/5 * * * *'      # every 5 minutes
+  workflow_dispatch:          # manual trigger
 
 permissions:
-  contents: write
+  contents: write              # allow updating .processed_issues
 
 jobs:
+  # Job A: Poll Jira & upload artifacts
   poll-and-flatten:
     runs-on: ubuntu-latest
     steps:
@@ -54,6 +55,7 @@ jobs:
           git commit -m "chore: update processed issues [skip ci]" || echo "Nothing to commit"
           git push
 
+  # Job B: Download artifact and deploy to EC2
   deploy-to-ec2:
     needs: poll-and-flatten
     runs-on: ubuntu-latest
@@ -61,7 +63,7 @@ jobs:
       - name: Ensure artifacts dir exists
         run: mkdir -p artifacts
 
-      - name: Download artifacts
+      - name: Download jira-artifacts artifact
         uses: actions/download-artifact@v4
         with:
           name: jira-artifacts
@@ -83,15 +85,13 @@ jobs:
         id: ec2_ip
         run: |
           INSTANCE_NAME="${{ vars.EC2_INSTANCE_NAME }}"
-          echo "▶ Looking up Public IP for instance Name=${INSTANCE_NAME}"
           ip=$(aws ec2 describe-instances \
-            --filters \
-              "Name=tag:Name,Values=${INSTANCE_NAME}" \
-              "Name=instance-state-name,Values=running" \
+            --filters Name=tag:Name,Values=${INSTANCE_NAME} \
+                      Name=instance-state-name,Values=running \
             --query "Reservations[0].Instances[0].PublicIpAddress" \
             --output text)
           if [[ -z "$ip" || "$ip" == "None" ]]; then
-            echo "❌ No running instance found with Name=${INSTANCE_NAME}"
+            echo "No running instance with Name=${INSTANCE_NAME}" >&2
             exit 1
           fi
           echo "ip=$ip" >> "$GITHUB_OUTPUT"
@@ -115,9 +115,15 @@ jobs:
         env:
           ANSIBLE_HOST_KEY_CHECKING: "False"
         run: |
-          ARTIFACT=$(ls artifacts/*.json | head -n1)
+          shopt -s nullglob
+          files=(artifacts/*.json)
+          ARTIFACT="${files[0]}"
+          if [[ -z "$ARTIFACT" ]]; then
+            echo "No artifact JSON found" >&2
+            exit 1
+          fi
           TARGET_IP=${{ steps.ec2_ip.outputs.ip }}
-          echo "▶ Copying $ARTIFACT to $TARGET_IP and printing via Ansible"
+          echo "Copying $ARTIFACT to $TARGET_IP and printing via Ansible"
           ansible-playbook ansible/print-artifact.yml \
             -i "${TARGET_IP}," \
             --user ${{ secrets.EC2_USER }} \
