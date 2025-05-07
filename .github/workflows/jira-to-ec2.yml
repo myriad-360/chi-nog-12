@@ -59,12 +59,13 @@ jobs:
   deploy-to-ec2:
     needs: poll-and-flatten
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           persist-credentials: true
-          
+
       - name: Ensure artifacts dir exists
         run: mkdir -p artifacts
 
@@ -73,8 +74,6 @@ jobs:
         with:
           name: jira-artifacts
           path: artifacts
-
-
 
       - name: Set up AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -88,14 +87,12 @@ jobs:
         run: |
           INSTANCE_NAME="${{ vars.EC2_INSTANCE_NAME }}"
           ip=$(aws ec2 describe-instances \
-            --filters Name=tag:Name,Values=${INSTANCE_NAME} \
-                      Name=instance-state-name,Values=running \
+            --region ${{ vars.AWS_REGION }} \
+            --filters \
+              "Name=tag:Name,Values=${INSTANCE_NAME}" \
+              "Name=instance-state-name,Values=running" \
             --query "Reservations[0].Instances[0].PublicIpAddress" \
             --output text)
-          if [[ -z "$ip" || "$ip" == "None" ]]; then
-            echo "No running instance with Name=${INSTANCE_NAME}" >&2
-            exit 1
-          fi
           echo "ip=$ip" >> "$GITHUB_OUTPUT"
 
       - name: Set up SSH key
@@ -107,7 +104,7 @@ jobs:
         run: |
           runner_ip=$(curl -s https://api.ipify.org)
           aws ec2 authorize-security-group-ingress \
-            --group-id ${{ vars.SG_ID }} \
+            --group-id ${{ secrets.SG_ID }} \
             --protocol tcp \
             --port 22 \
             --cidr ${runner_ip}/32 \
@@ -116,35 +113,33 @@ jobs:
       - name: Copy artifact to EC2 via SCP
         run: |
           shopt -s nullglob
-          # pick the first JSON
           files=(artifacts/*.json)
           ARTIFACT="${files[0]}"
-          test -f "$ARTIFACT" || { echo "❌ No artifact to send"; exit 1; }
-
+          if [[ -z "$ARTIFACT" ]]; then
+            echo "❌ No artifact to send" >&2
+            exit 1
+          fi
           TARGET_IP=${{ steps.ec2_ip.outputs.ip }}
-          echo "▶ SCP $ARTIFACT → ${{ secrets.EC2_USER }}@$TARGET_IP:/tmp/"
-          scp \
-            -o StrictHostKeyChecking=no \
-            -i key.pem \
-            "$ARTIFACT" \
-            "${{ secrets.EC2_USER }}@$TARGET_IP:/tmp/"
-    
+          scp -o StrictHostKeyChecking=no \
+              -i key.pem \
+              "$ARTIFACT" \
+              "${{ secrets.EC2_USER }}@$TARGET_IP:/tmp/"
+
       - name: SSH in & print artifact
         run: |
           BASENAME=$(basename artifacts/*.json)
           TARGET_IP=${{ steps.ec2_ip.outputs.ip }}
-          echo "▶ SSH ${{ secrets.EC2_USER }}@$TARGET_IP and cat /tmp/$BASENAME"
-          ssh \
-            -o StrictHostKeyChecking=no \
-            -i key.pem \
-            "${{ secrets.EC2_USER }}@$TARGET_IP" \
-            "cat /tmp/$BASENAME"
+          ssh -o StrictHostKeyChecking=no \
+              -i key.pem \
+              "${{ secrets.EC2_USER }}@$TARGET_IP" \
+              "cat /tmp/$BASENAME"
 
       - name: Revoke SSH rule from Security Group
+        if: always()
         run: |
           runner_ip=$(curl -s https://api.ipify.org)
           aws ec2 revoke-security-group-ingress \
-            --group-id ${{ vars.SG_ID }} \
+            --group-id ${{ secrets.SG_ID }} \
             --protocol tcp \
             --port 22 \
             --cidr ${runner_ip}/32 \
