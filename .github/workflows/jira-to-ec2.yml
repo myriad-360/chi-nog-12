@@ -89,6 +89,12 @@ jobs:
           echo "⚠️  No Jira artifacts found. Skipping deploy."
           exit 0
 
+      - name: Checkout repo
+        if: steps.check-artifacts.outputs.found == 'true'
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
       - name: Set up AWS credentials
         if: steps.check-artifacts.outputs.found == 'true'
         uses: aws-actions/configure-aws-credentials@v4
@@ -123,7 +129,6 @@ jobs:
 
       - name: Authorize SSH from Runner IP
         if: steps.check-artifacts.outputs.found == 'true'
-        id: ip
         run: |
           runner_ip=$(curl -s https://api.ipify.org)
           aws ec2 authorize-security-group-ingress \
