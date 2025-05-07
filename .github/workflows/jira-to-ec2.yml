@@ -65,12 +65,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download artifacts (optional)
+      # ensure artifacts directory exists
+      - name: Ensure artifacts dir exists
+        run: mkdir -p artifacts
+
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           name: jira-artifacts
           path: artifacts
-        continue-on-error: true
+          run-id: ${{ github.run_id }}   # ← explicitly pull from this same run
 
       - name: Check for downloaded artifacts
         id: check-artifacts
@@ -108,7 +112,6 @@ jobs:
         id: ec2_ip
         run: |
           INSTANCE_NAME="${{ vars.EC2_INSTANCE_NAME }}"
-          echo "▶ Looking up Public IP for instance Name=${INSTANCE_NAME}"
           ip=$(aws ec2 describe-instances \
             --filters \
               "Name=tag:Name,Values=${INSTANCE_NAME}" \
