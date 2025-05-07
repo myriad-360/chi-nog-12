@@ -68,16 +68,44 @@ jobs:
           --cidr ${{ steps.ip.outputs.ip }}/32 \
           --region ${{ vars.AWS_REGION }} || true
 
+    - name: Get EC2 Public IP by Name tag
+      id: ec2_ip
+      run: |
+        INSTANCE_NAME="${{ vars.EC2_INSTANCE_NAME }}"
+        echo "Looking up Public IP for instance named: $INSTANCE_NAME"
+        ip=$(aws ec2 describe-instances \
+          --filters \
+            "Name=tag:Name,Values=${INSTANCE_NAME}" \
+            "Name=instance-state-name,Values=running" \
+          --query "Reservations[0].Instances[0].PublicIpAddress" \
+          --output text)
+        if [[ -z "$ip" || "$ip" == "None" ]]; then
+          echo "❌ No running instance found with Name=${INSTANCE_NAME}"
+          exit 1
+        fi
+        echo "ip=$ip" >> "$GITHUB_OUTPUT"
     - name: Run Ansible playbook remotely
       run: |
+        TARGET_IP="${{ steps.ec2_ip.outputs.ip }}"
+        echo "▶ Running playbook against $TARGET_IP"
         ansible-playbook ansible/ansible-hello-world-via-actions.yml \
-          -i "${{ vars.EC2_HOST }}," \
+          -i "${TARGET_IP}," \
           --user ${{ secrets.EC2_USER }} \
           --private-key key.pem \
           --ssh-extra-args "-o StrictHostKeyChecking=no" \
           -e "ansible_python_interpreter=/usr/bin/python3"
       env:
         ANSIBLE_HOST_KEY_CHECKING: "False"
+    # - name: Run Ansible playbook remotely
+    #   run: |
+    #     ansible-playbook ansible/ansible-hello-world-via-actions.yml \
+    #       -i "${{ vars.EC2_HOST }}," \
+    #       --user ${{ secrets.EC2_USER }} \
+    #       --private-key key.pem \
+    #       --ssh-extra-args "-o StrictHostKeyChecking=no" \
+    #       -e "ansible_python_interpreter=/usr/bin/python3"
+    #   env:
+    #     ANSIBLE_HOST_KEY_CHECKING: "False"
 
     - name: Revoke SSH rule from security group
       if: always()
