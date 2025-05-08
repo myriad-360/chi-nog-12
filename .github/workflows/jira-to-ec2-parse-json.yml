@@ -154,7 +154,7 @@ jobs:
             exit 1
           fi
 
-          ansible-playbook playbooks/print_json_vars.yml \
+          ansible-playbook ansible/print_json_vars.yml \
             -i "$TARGET_IP," \
             --private-key key.pem \
             -u ${{ secrets.EC2_USER }} \
