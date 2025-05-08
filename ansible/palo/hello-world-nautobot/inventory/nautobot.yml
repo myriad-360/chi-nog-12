@@ -1,0 +1,10 @@
+plugin: networktocode.nautobot.inventory
+api_endpoint: "http://127.0.0.1:8000"
+token: "85502bf6a264fe698dca8e060a6cd0c9b083cc1f"
+validate_certs: false
+
+resources:
+  - path: dcim/devices
+
+compose:
+  ansible_host: "{{ primary_ip4.address }}"

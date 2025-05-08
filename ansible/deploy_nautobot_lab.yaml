@@ -11,11 +11,11 @@
     nautobot_container_name: nautobot
 
   tasks:
-    - name: Ensure local plugin directory exists
-      ansible.builtin.file:
-        path: "{{ nautobot_compose_path }}/plugins/firewall_rule_request"
-        state: directory
-        mode: '0755'
+    # - name: Ensure local plugin directory exists
+    #   ansible.builtin.file:
+    #     path: "{{ nautobot_compose_path }}/plugins/firewall_rule_request"
+    #     state: directory
+    #     mode: '0755'
         
     - name: Check if Nautobot container exists
       community.docker.docker_container_info:
@@ -29,12 +29,12 @@
         chdir: "{{ nautobot_compose_path }}"
       when: nautobot_container_info.containers is not defined or nautobot_container_info.containers | length == 0
 
-    - name: Scaffold Nautobot plugin skeleton
-      ansible.builtin.command:
-        chdir: "{{ nautobot_compose_path }}"
-        cmd: docker-compose exec -T -w /opt/nautobot {{ nautobot_container_name }} nautobot-server startapp firewall_rule_request /opt/nautobot/plugins/firewall_rule_request
-      args:
-        creates: "{{ nautobot_compose_path }}/plugins/firewall_rule_request/__init__.py"
+    # - name: Scaffold Nautobot plugin skeleton
+    #   ansible.builtin.command:
+    #     chdir: "{{ nautobot_compose_path }}"
+    #     cmd: docker-compose exec -T -w /opt/nautobot {{ nautobot_container_name }} nautobot-server startapp firewall_rule_request /opt/nautobot/plugins/firewall_rule_request
+    #   args:
+    #     creates: "{{ nautobot_compose_path }}/plugins/firewall_rule_request/__init__.py"
 
     - name: Create Nautobot superuser
     #TODO I'm not even convinced any of this is working

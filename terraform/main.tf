@@ -135,6 +135,8 @@ resource "aws_instance" "nautobot_host" {
                 apt-get install -y software-properties-common
                 apt-get install -y ansible git python3-pip docker.io docker-compose
                 usermod -aG docker ubuntu
+                pip install -r https://raw.githubusercontent.com/PaloAltoNetworks/pan-os-ansible/develop/requirements.txt
+                ansible-galaxy collection install paloaltonetworks.panos networktocode.nautobot
                 EOF 
 
   tags = {
