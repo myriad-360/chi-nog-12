@@ -7,3 +7,5 @@ services:
     ports:
       - "8000:8000"
     restart: unless-stopped
+    volumes:
+      - ./plugins:/opt/nautobot/plugins:rw
