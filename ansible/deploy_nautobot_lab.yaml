@@ -22,13 +22,6 @@
         cmd: docker-compose up -d
         chdir: "{{ nautobot_compose_path }}"
     
-    - name: Scaffold Nautobot plugin skeleton
-      ansible.builtin.command:
-        cmd: docker exec -i {{ nautobot_container_name }} nautobot-server startplugin firewall_rule_request /opt/nautobot/plugins/firewall_rule_request
-      args:
-        creates: "{{ nautobot_compose_path }}/plugins/firewall_rule_request/setup.cfg"
-
-
     - name: Create Nautobot superuser
       ansible.builtin.command:
         cmd: docker-compose exec -T nautobot nautobot-server createsuperuser --noinput
@@ -44,3 +37,9 @@
     - name: Debug superuser creation output
       ansible.builtin.debug:
         var: superuser_result.stdout
+    
+    - name: Scaffold Nautobot plugin skeleton
+      ansible.builtin.command:
+        cmd: docker-compose exec -T {{ nautobot_container_name }} nautobot-server startapp firewall_rule_request /opt/nautobot/plugins/firewall_rule_request
+      args:
+        creates: "{{ nautobot_compose_path }}/plugins/firewall_rule_request/__init__.py"
