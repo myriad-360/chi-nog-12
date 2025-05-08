@@ -8,4 +8,4 @@ services:
       - "8000:8000"
     restart: unless-stopped
     volumes:
-      - ./plugins:/opt/nautobot/plugins:rw
+      - /home/ubuntu/chi-nog-12/docker/nautobot/plugins:/opt/nautobot/plugins:rw

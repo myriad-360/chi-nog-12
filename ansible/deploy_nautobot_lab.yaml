@@ -13,33 +13,45 @@
   tasks:
     - name: Ensure local plugin directory exists
       ansible.builtin.file:
-        path: "{{ nautobot_compose_path }}/plugins"
+        path: "{{ nautobot_compose_path }}/plugins/firewall_rule_request"
         state: directory
         mode: '0755'
         
+    - name: Check if Nautobot container exists
+      community.docker.docker_container_info:
+        name: "{{ nautobot_container_name }}"
+      register: nautobot_container_info
+      ignore_errors: yes
+
     - name: Bring up Nautobot stack with Docker Compose
       ansible.builtin.command:
         cmd: docker-compose up -d
         chdir: "{{ nautobot_compose_path }}"
-    
-    - name: Create Nautobot superuser
-      ansible.builtin.command:
-        cmd: docker-compose exec -T nautobot nautobot-server createsuperuser --noinput
-        chdir: "{{ nautobot_compose_path }}"
-      environment: #TODO Fix these environment variables. They aren't being picked up
-        NAUTOBOT_SUPERUSER_NAME: "{{ nautobot_superuser_name }}"
-        NAUTOBOT_SUPERUSER_EMAIL: "{{ nautobot_superuser_email }}"
-        NAUTOBOT_SUPERUSER_PASSWORD: "{{ nautobot_superuser_password }}"
-      register: superuser_result
-      failed_when: false
-      changed_when: "'Superuser created successfully' in superuser_result.stdout"
+      when: nautobot_container_info.containers is not defined or nautobot_container_info.containers | length == 0
 
-    - name: Debug superuser creation output
-      ansible.builtin.debug:
-        var: superuser_result.stdout
-    
     - name: Scaffold Nautobot plugin skeleton
       ansible.builtin.command:
-        cmd: docker-compose exec -T {{ nautobot_container_name }} nautobot-server startapp firewall_rule_request /opt/nautobot/plugins/firewall_rule_request
+        chdir: "{{ nautobot_compose_path }}"
+        cmd: docker-compose exec -T -w /opt/nautobot {{ nautobot_container_name }} nautobot-server startapp firewall_rule_request /opt/nautobot/plugins/firewall_rule_request
+        #    docker-compose exec -T -w /opt/nautobot nautobot                      nautobot-server startapp firewall_rule_request /opt/nautobot/plugins/firewall_rule_request
       args:
         creates: "{{ nautobot_compose_path }}/plugins/firewall_rule_request/__init__.py"
+
+
+
+    # - name: Create Nautobot superuser
+    # #TODO I'm not even convinced any of this is working
+    #   ansible.builtin.command:
+    #     cmd: docker-compose exec -T nautobot nautobot-server createsuperuser --noinput
+    #     chdir: "{{ nautobot_compose_path }}"
+    #   environment: #TODO Fix these environment variables. They aren't being picked up
+    #     NAUTOBOT_SUPERUSER_NAME: "{{ nautobot_superuser_name }}"
+    #     NAUTOBOT_SUPERUSER_EMAIL: "{{ nautobot_superuser_email }}"
+    #     NAUTOBOT_SUPERUSER_PASSWORD: "{{ nautobot_superuser_password }}"
+    #   register: superuser_result
+    #   failed_when: false
+    #   changed_when: "'Superuser created successfully' in superuser_result.stdout"
+
+    # - name: Debug superuser creation output
+    #   ansible.builtin.debug:
+    #     var: superuser_result.stdout
