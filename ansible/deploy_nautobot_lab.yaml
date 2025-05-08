@@ -2,6 +2,8 @@
 - name: Deploy Nautobot Lab container using Docker Compose
   hosts: localhost
   become: true
+  collections:
+    - community.docker
 
   vars_files:
     - ./nautobot-superuser-vars.yml
@@ -11,16 +13,27 @@
     nautobot_container_name: nautobot
 
   tasks:
-    - name: Bring up Nautobot stack with Docker Compose
-      ansible.builtin.command:
-        cmd: docker-compose up -d
-        chdir: "{{ nautobot_compose_path }}"
+    - name: Ensure local plugin directory exists
+      ansible.builtin.file:
+        path: "{{ nautobot_compose_path }}/plugins"
+        state: directory
+        mode: '0755'
+
+    - name: Deploy Nautobot Lab container
+      ansible.builtin.docker_container:
+        name: "{{ nautobot_container_name }}"
+        image: networktocode/nautobot-lab
+        state: started
+        restart_policy: unless-stopped
+        published_ports:
+          - "8000:8000"
+        volumes:
+          - "{{ nautobot_compose_path }}/plugins:/opt/nautobot/plugins:rw"
 
     - name: Create Nautobot superuser
       ansible.builtin.command:
         cmd: docker-compose exec -T nautobot nautobot-server createsuperuser --noinput
-        chdir: "{{ nautobot_compose_path }}"
-      environment:
+      environment: #TODO Fix these environment variables. They aren't being picked up
         NAUTOBOT_SUPERUSER_NAME: "{{ nautobot_superuser_name }}"
         NAUTOBOT_SUPERUSER_EMAIL: "{{ nautobot_superuser_email }}"
         NAUTOBOT_SUPERUSER_PASSWORD: "{{ nautobot_superuser_password }}"
