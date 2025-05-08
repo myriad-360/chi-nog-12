@@ -1,0 +1,6 @@
+---
+object_name: "web-server-internal-ip"
+object_ip: "172.16.3.67/32"
+object_description: "Web server internal IP address"
+rule_name: "inbound-web-server-1"
+rule_description: "Inbound web server rule"

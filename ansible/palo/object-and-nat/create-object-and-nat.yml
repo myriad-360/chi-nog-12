@@ -1,0 +1,56 @@
+---
+- name: Gather system info
+  hosts: "firewall"
+  connection: local
+  vars_files:
+    - vars/palo-secrets.yml 
+    - vars/input-variables.yml
+  vars:
+    device:
+      ip_address: "{{ ip_address }}"
+      username: "{{ username }}"
+      password: "{{ password }}"
+
+  collections:
+    - paloaltonetworks.panos
+
+  tasks:  
+    - name: Create source address object
+      paloaltonetworks.panos.panos_address_object:
+        provider: "{{ device }}"
+        name: "{{ object_name }}"
+        address_type: "ip-netmask"
+        value: "{{ object_ip }}"
+        description: "{{ object_description }}"
+        state: "present"
+
+    - name: Add NAT rule for inbound web server
+      paloaltonetworks.panos.panos_nat_rule2:
+        provider: '{{ device }}'
+        name: "{{ rule_name }}"
+        description: "{{ rule_description }}"
+        nat_type: 'ipv4'
+        from_zones:
+          - 'outside'
+        to_zones:
+          - 'outside'
+        service: 'service-http'
+        source_addresses:
+          - 'any'
+        destination_addresses:
+          #- '172.16.1.166'
+          - "{{ object_name }}"
+        destination_dynamic_translated_address: 'web-server-internal-ip'
+        destination_dynamic_translated_port: 80
+        destination_dynamic_translated_distribution: 'round-robin'
+        state: 'present'
+
+
+    - name: Commit configuration
+      paloaltonetworks.panos.panos_commit_firewall:
+        provider: "{{ device }}"
+      register: results
+    
+    - name: Dispaly commit message
+      debug:
+        msg: "Commit with Job ID: {{ results.jobid }} had output: {{ results.details }}"

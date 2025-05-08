@@ -30,5 +30,6 @@ terraform/chinog12.auto.tfvars
 
 
 ansible/nautobot-superuser-vars.yml
-ansible/palo/host_vars/palo-secrets.yml
+palo-secrets.yml
 jira/.env
+
