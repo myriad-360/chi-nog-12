@@ -177,6 +177,7 @@ jobs:
 
       - name: Copy playbook, inventory & JSON to EC2
         run: |
+          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} 'rm -f /tmp/*.json'
           scp -o StrictHostKeyChecking=no -i key.pem -r \
             ansible/palo/object-and-nat-nautobot/create-object-and-nat-viaGH.yml \
             ansible/palo/object-and-nat-nautobot/inventory \
