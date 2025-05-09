@@ -9,7 +9,7 @@ This project automates the provisioning, configuration, and CI/CD-driven deploym
 - **GitHub Actions**: Orchestrates the Jira polling, artifact upload, EC2 deployment, Ansible execution, and Jira status updates on a schedule or manual dispatch.  
 
 <details>
-<summary>## Repository Structure</summary>
+<summary>Repository Structure</summary>
 
 ```
 .
