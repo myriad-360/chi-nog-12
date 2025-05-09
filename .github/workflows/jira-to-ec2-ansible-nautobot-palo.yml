@@ -201,6 +201,17 @@ jobs:
               --extra-vars "@/tmp/$JSON_FILE"
           EOF
 
+      - name: Update Jira ticket status
+        if: success()
+        run: |
+          TICKET_FILE=$(basename artifacts/*.json)
+          ISSUE_KEY=${TICKET_FILE%.json}
+          echo "Updating Jira ticket $ISSUE_KEY to Confirmed Deployed"
+          python jira/jira_update_ticket.py "$ISSUE_KEY" --transition "Confirmed Deployed"
+        env:
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          JIRA_SITE: ${{ vars.JIRA_SITE }}
       - name: Revoke SSH rule from Security Group
         if: always()
         run: |

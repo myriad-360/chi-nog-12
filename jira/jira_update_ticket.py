@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Usage:
+#   jira_update_ticket.py <issue_key> [-t <transition_name>]
+#   ./jira_update_ticket.py JTEJ-42 --transition "Release to Prod"
 import os
 import sys
 import requests
