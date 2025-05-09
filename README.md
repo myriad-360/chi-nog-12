@@ -9,10 +9,7 @@ This project automates the provisioning, configuration, and CI/CD-driven deploym
 - **GitHub Actions**: Orchestrates the Jira polling, artifact upload, EC2 deployment, Ansible execution, and Jira status updates on a schedule or manual dispatch.  
 
 # Demo Video
-[![Network Automation Pipelines]([https://www.youtube.com/watch?v=VIDEO_ID](https://youtu.be/rEISJXbu_cU))
-
-
-
+[![Watch the video](https://img.youtube.com/vi/rEISJXbu_cU/maxresdefault.jpg)](https://www.youtube.com/watch?v=rEISJXbu_cU)
 
 <details>
 <summary>Repository Structure</summary>
