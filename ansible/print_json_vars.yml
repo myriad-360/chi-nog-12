@@ -6,7 +6,7 @@
   tasks:
     - name: Load ticket JSON into var 'ticket'
       include_vars:
-        file: "{{ lookup('env','ARTIFACT') }}"
+        file: "{{ playbook_dir }}/../{{ lookup('env','ARTIFACT') }}"
         name: ticket
 
     - name: Show me everything in the ticket JSON
