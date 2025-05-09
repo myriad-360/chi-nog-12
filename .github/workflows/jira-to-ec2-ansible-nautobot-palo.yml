@@ -9,7 +9,6 @@ permissions:
   contents: write   # allow updating .processed_issues
 
 jobs:
-  # Job A: Poll Jira & upload artifacts
   poll-and-flatten:
     runs-on: ubuntu-latest
     outputs:
@@ -67,7 +66,6 @@ jobs:
           git commit -m "chore: update processed issues [skip ci]" || echo "Nothing to commit"
           git push
 
-  # Job B: Download artifact and deploy to EC2
   deploy-to-ec2:
     needs: poll-and-flatten
     if: needs.poll-and-flatten.outputs.no_tickets == 'false'
@@ -102,7 +100,7 @@ jobs:
 
       - name: Get GitHub runner's public IP
         id: ip
-        run: echo "ip=$(curl -s https://api.ipify.org)" >> "$GITHUB_OUTPUT"
+        run: echo "ip=$(curl -s https://api.ipify.org)" >>"$GITHUB_OUTPUT"
 
       - name: Get VPC ID by Name tag
         id: vpc
@@ -115,7 +113,7 @@ jobs:
             echo "No VPC found with tag Name=chi-nog-12-pa"
             exit 1
           fi
-          echo "id=$vpc_id" >> "$GITHUB_OUTPUT"
+          echo "id=$vpc_id" >>"$GITHUB_OUTPUT"
 
       - name: Get security‑group ID from EC2 instance
         id: sg
@@ -138,7 +136,7 @@ jobs:
             echo "❌ Could not determine SG for $instance_id" >&2
             exit 1
           fi
-          echo "id=$sg_id" >> "$GITHUB_OUTPUT"
+          echo "id=$sg_id" >>"$GITHUB_OUTPUT"
 
       - name: Get EC2 Public IP by Name tag
         id: ec2_ip
@@ -153,7 +151,7 @@ jobs:
             echo "❌ No running instance found" >&2
             exit 1
           fi
-          echo "ip=$ip" >> "$GITHUB_OUTPUT"
+          echo "ip=$ip" >>"$GITHUB_OUTPUT"
 
       - name: Debug SG lookup
         run: |
@@ -194,24 +192,29 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} << 'EOF'
             export PALO_ADMIN_USER=${{ secrets.PALO_ADMIN_USER }}
             export PALO_ADMIN_PW=${{ secrets.PALO_ADMIN_PW }}
-            JSON_FILE=$(basename /tmp/*.json)
-            export ARTIFACT="/tmp/$JSON_FILE"
-            ansible-playbook /tmp/create-object-and-nat-viaGH.yml \
-              -i /tmp/inventory/nautobot.yml \
-              --extra-vars "@/tmp/$JSON_FILE"
+            for file in /tmp/*.json; do
+              JSON_FILE=$(basename "$file")
+              echo "Running playbook for $JSON_FILE"
+              ansible-playbook /tmp/create-object-and-nat-viaGH.yml \
+                -i /tmp/inventory/nautobot.yml \
+                --extra-vars "@/tmp/$JSON_FILE"
+            done
           EOF
 
       - name: Update Jira ticket status
         if: success()
         run: |
-          TICKET_FILE=$(basename artifacts/*.json)
-          ISSUE_KEY=${TICKET_FILE%.json}
-          echo "Updating Jira ticket $ISSUE_KEY to Confirmed Deployed"
-          python jira/jira_update_ticket.py "$ISSUE_KEY" --transition "Confirmed Deployed"
+          for file in artifacts/*.json; do
+            TICKET_FILE=$(basename "$file")
+            ISSUE_KEY=${TICKET_FILE%.json}
+            echo "Updating Jira ticket $ISSUE_KEY to Confirmed Deployed"
+            python jira/jira_update_ticket.py "$ISSUE_KEY" --transition "Confirmed Deployed"
+          done
         env:
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
           JIRA_SITE: ${{ vars.JIRA_SITE }}
+
       - name: Revoke SSH rule from Security Group
         if: always()
         run: |
