@@ -9,6 +9,35 @@
         file: "{{ playbook_dir }}/../{{ lookup('env','ARTIFACT') }}"
         name: ticket
 
-    - name: Show me everything in the ticket JSON
+    - name: Extract JSON fields into friendly vars
+      set_fact:
+        business_justification: "{{ ticket['Business Justification'] }}"
+        destination_ip:         "{{ ticket['Destination IP'] }}"
+        destination_port:       "{{ ticket['Destination Port'] | int }}"
+        protocol:               "{{ ticket['Protocol'] }}"
+        source_ip_address:      "{{ ticket['Source IP Address'] }}"
+        created:                "{{ ticket['created'] }}"
+        description:            "{{ ticket['description'] }}"
+        form_id:                "{{ ticket['formId'] }}"
+        form_name:              "{{ ticket['formName'] }}"
+        issue_key:              "{{ ticket['issueKey'] }}"
+        status:                 "{{ ticket['status'] }}"
+        summary:                "{{ ticket['summary'] }}"
+        updated:                "{{ ticket['updated'] }}"
+
+    - name: Print extracted variables
       debug:
-        var: ticket
+        msg:
+          - "Business Justification: {{ business_justification }}"
+          - "Destination IP: {{ destination_ip }}"
+          - "Destination Port: {{ destination_port }}"
+          - "Protocol: {{ protocol }}"
+          - "Source IP Address: {{ source_ip_address }}"
+          - "Created: {{ created }}"
+          - "Description: {{ description }}"
+          - "Form ID: {{ form_id }}"
+          - "Form Name: {{ form_name }}"
+          - "Issue Key: {{ issue_key }}"
+          - "Status: {{ status }}"
+          - "Summary: {{ summary }}"
+          - "Updated: {{ updated }}"
