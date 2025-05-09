@@ -45,7 +45,7 @@
   tasks:
     - name: Load ticket JSON into var 'ticket'
       include_vars:
-        file: "{{ playbook_dir }}/../{{ lookup('env','ARTIFACT') }}"
+        file: "{{ lookup('env','ARTIFACT') }}"
         name: ticket
     # sample json from a previous ticket
     # "ticket": {

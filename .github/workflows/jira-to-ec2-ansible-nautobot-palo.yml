@@ -145,7 +145,7 @@ jobs:
         run: |
           pip install -r https://raw.githubusercontent.com/PaloAltoNetworks/pan-os-ansible/develop/requirements.txt
           ansible-galaxy collection install paloaltonetworks.panos networktocode.nautobot
-          
+
       - name: Dump ticket JSON via Ansible
         shell: bash
         env:
@@ -154,6 +154,7 @@ jobs:
           shopt -s nullglob
           files=(artifacts/*.json)
           ARTIFACT="${files[0]}"
+          export ARTIFACT="$(pwd)/${ARTIFACT}"
           if [[ -z "$ARTIFACT" ]]; then
             echo "❌ No artifact to send" >&2
             exit 1
