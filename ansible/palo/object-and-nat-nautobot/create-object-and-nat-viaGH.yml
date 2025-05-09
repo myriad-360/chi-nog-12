@@ -102,7 +102,7 @@
     - name: Create source address object
       paloaltonetworks.panos.panos_address_object:
         provider: "{{ device }}"
-        name: "{{ issue_key }}-{{destination_ip}}"
+        name: "{{ issue_key }}-{{ destination_ip | replace('/', '-') }}"
         address_type: "ip-netmask"
         value: "{{ destination_ip }}"
         description: "{{ description }}"
@@ -111,7 +111,7 @@
     - name: Add NAT rule for inbound web server
       paloaltonetworks.panos.panos_nat_rule2:
         provider: '{{ device }}'
-        name: "{{ issue_key }}-{{ destination_ip }}"
+        name: "{{ issue_key }}-{{ destination_ip | replace('/', '-') }}"
         description: "{{ summary }}"
         nat_type: 'ipv4'
         from_zones:
