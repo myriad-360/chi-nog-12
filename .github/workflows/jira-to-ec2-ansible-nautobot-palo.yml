@@ -1,0 +1,173 @@
+name: Poll Jira & Deploy Artifact to EC2 & parse JSON
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write              # allow updating .processed_issues
+
+jobs:
+  # Job A: Poll Jira & upload artifacts
+  poll-and-flatten:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install requests python-dotenv
+
+      - name: Prepare artifacts & memory
+        run: |
+          mkdir -p artifacts
+          touch .processed_issues
+
+      - name: Run Jira polling script
+        env:
+          JIRA_EMAIL:   ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN:   ${{ secrets.JIRA_TOKEN }}
+          JIRA_PROJECT: ${{ vars.JIRA_PROJECT }}
+          JIRA_STATUS:  ${{ vars.JIRA_STATUS }}
+          JIRA_SITE:    ${{ vars.JIRA_SITE }}
+        run: python jira/jira_polling_script.py
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jira-artifacts
+          path: artifacts/*.json
+
+      - name: Commit & push memory update
+        if: success()
+        run: |
+          git config user.name  "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add .processed_issues
+          git commit -m "chore: update processed issues [skip ci]" || echo "Nothing to commit"
+          git push
+
+  # Job B: Download artifact and deploy to EC2
+  deploy-to-ec2:
+    needs: poll-and-flatten
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Ensure artifacts dir exists
+        run: mkdir -p artifacts
+
+      - name: Download jira-artifacts artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: jira-artifacts
+          path: artifacts
+
+      - name: Set up AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:           ${{ vars.AWS_REGION }}
+
+      - name: Set up SSH key
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
+          chmod 600 key.pem
+
+      - name: Get GitHub runner's public IP
+        id: ip
+        run: echo "ip=$(curl -s https://api.ipify.org)" >> "$GITHUB_OUTPUT"
+        # Retrieves the public IP address of the GitHub runner and stores it in the workflow output.
+  
+      - name: Get VPC ID by Name tag
+        id: vpc
+        run: |
+          vpc_id=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=chi-nog-12-pa" \
+            --query "Vpcs[0].VpcId" \
+            --output text)
+          if [[ "$vpc_id" == "None" ]]; then
+            echo "No VPC found with tag Name=chi-nog-12-pa"
+            exit 1
+          fi
+          echo "id=$vpc_id" >> "$GITHUB_OUTPUT"
+        # Queries AWS to find the VPC ID associated with a specific Name tag.
+        # Exits the workflow if no VPC is found with the specified tag.
+        # Outputs the VPC ID for use in subsequent steps.
+    
+      - name: Get SG ID from VPC
+        id: sg
+        run: |
+          sg_id=$(aws ec2 describe-security-groups \
+            --filters "Name=group-name,Values=nautobot-sg" "Name=vpc-id,Values=${{ steps.vpc.outputs.id }}" \
+            --query "SecurityGroups[0].GroupId" \
+            --output text)
+          echo "id=$sg_id" >> "$GITHUB_OUTPUT"
+    
+      - name: Get EC2 Public IP by Name tag
+        id: ec2_ip
+        run: |
+          INSTANCE_NAME="${{ vars.EC2_INSTANCE_NAME }}"
+          echo "Looking up Public IP for instance named: $INSTANCE_NAME"
+          ip=$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:Name,Values=${INSTANCE_NAME}" \
+              "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].PublicIpAddress" \
+            --output text)
+          if [[ -z "$ip" || "$ip" == "None" ]]; then
+            echo "❌ No running instance found with Name=${INSTANCE_NAME}"
+            exit 1
+          fi
+          echo "ip=$ip" >> "$GITHUB_OUTPUT"
+
+      - name: Authorize SSH from runner IP
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ steps.sg.outputs.id }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr ${{ steps.ip.outputs.ip }}/32 \
+            --region ${{ vars.AWS_REGION }} || true
+          
+      - name: Dump ticket JSON via Ansible
+        shell: bash
+        env:
+          TARGET_IP: ${{ steps.ec2_ip.outputs.ip }}
+        run: |
+          shopt -s nullglob
+          files=(artifacts/*.json)
+          ARTIFACT="${files[0]}"
+          if [[ -z "$ARTIFACT" ]]; then
+            echo "❌ No artifact to send" >&2
+            exit 1
+          fi
+          export ARTIFACT
+
+          ansible-playbook ansible/palo/object-and-nat-nautobot/create-object-and-nat-viaGH.yml \
+            -i "$TARGET_IP," \
+            --private-key key.pem \
+            -u ${{ secrets.EC2_USER }} \
+            --ssh-extra-args="-o StrictHostKeyChecking=no"
+
+      - name: Revoke SSH rule from Security Group
+        if: always()
+        run: |
+          runner_ip=$(curl -s https://api.ipify.org)
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ secrets.SG_ID }} \
+            --protocol tcp \
+            --port 22 \
+            --cidr ${runner_ip}/32 \
+            --region ${{ vars.AWS_REGION }} || true
