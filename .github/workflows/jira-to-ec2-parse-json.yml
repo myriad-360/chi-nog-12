@@ -147,10 +147,10 @@ jobs:
           TARGET_IP: ${{ steps.ec2_ip.outputs.ip }}
         run: |
           shopt -s nullglob
-          files=(jira/artifacts/*.json)
+          files=(artifacts/*.json)
           ARTIFACT="${files[0]}"
           if [[ -z "$ARTIFACT" ]]; then
-            echo "❌ No artifact to process" >&2
+            echo "❌ No artifact to send" >&2
             exit 1
           fi
           export ARTIFACT

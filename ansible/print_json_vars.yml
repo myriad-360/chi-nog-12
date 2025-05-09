@@ -1,13 +1,14 @@
 ---
-- name: Hello World — dump all ticket vars
+- name: Hello World — dump all ticket JSON vars
   hosts: all
   gather_facts: false
 
-  vars:
-    # load the JSON passed via --extra-vars into a var called 'ticket'
-    ticket: "{{ lookup('file', ansible_extra_vars_file) | from_json }}"
-
   tasks:
+    - name: Load ticket JSON into var 'ticket'
+      include_vars:
+        file: "{{ lookup('env','ARTIFACT') }}"
+        name: ticket
+
     - name: Show me everything in the ticket JSON
       debug:
         var: ticket
