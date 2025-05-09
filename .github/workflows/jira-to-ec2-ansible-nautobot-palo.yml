@@ -183,14 +183,17 @@ jobs:
 
       - name: Run playbook on EC2
         run: |
-          ssh -vvv -o StrictHostKeyChecking=no -i key.pem \
+          ssh -o StrictHostKeyChecking=no -i key.pem \
             ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} << 'EOF'
             export PALO_ADMIN_USER=${{ secrets.PALO_ADMIN_USER }}
             export PALO_ADMIN_PW=${{ secrets.PALO_ADMIN_PW }}
 
-            # Find the JSON we just scp'd into /tmp
+            # pick up the JSON we scp'd into /tmp
             JSON_FILE=$(basename /tmp/*.json)
             echo "Using /tmp/$JSON_FILE"
+
+            # *** add this line ***
+            export ARTIFACT="/tmp/$JSON_FILE"
 
             ansible-playbook /tmp/create-object-and-nat-viaGH.yml \
               -i "localhost," \
