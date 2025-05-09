@@ -69,16 +69,10 @@ def main():
         with open(mem_file) as f:
             seen = {line.strip() for line in f if line.strip()}
 
-    # ── 4.1) Bail if any fetched ticket is already processed ────────────────
-    for k in keys:
-        if k in seen:
-            print(f"Issue {k} already processed; exiting.")
-            return
-
-    # ── 5) None were processed yet; process all fetched tickets ──────────────
-    new_keys = keys
+    # ── 5) Filter out already processed tickets ─────────────────────────────
+    new_keys = [k for k in keys if k not in seen]
     if not new_keys:
-        print("No tickets found; exiting.")
+        print("No new tickets; exiting.")
         return
 
     os.makedirs("artifacts", exist_ok=True)
