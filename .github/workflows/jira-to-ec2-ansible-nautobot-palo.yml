@@ -131,7 +131,10 @@ jobs:
             exit 1
           fi
           echo "ip=$ip" >> "$GITHUB_OUTPUT"
-
+      - name: Debug SG lookup
+        run: |
+          echo "VPC ID = ${{ steps.vpc.outputs.id }}"
+          echo "SG ID  = ${{ steps.sg.outputs.id }}"
       - name: Authorize SSH from runner IP
         run: |
           aws ec2 authorize-security-group-ingress \
@@ -148,21 +151,21 @@ jobs:
 
       - name: Copy playbook & JSON to EC2
         run: |
-          scp -o StrictHostKeyChecking=no -i key.pem \
+          scp -vvv -o StrictHostKeyChecking=no -i key.pem \
             ansible/palo/object-and-nat-nautobot/create-object-and-nat-viaGH.yml \
             artifacts/*.json \
             ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }}:/tmp/
 
       - name: Install PAN‑OS requirements on EC2
         run: |
-          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} << 'EOF'
+          ssh -vvv -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} << 'EOF'
             pip install -r https://raw.githubusercontent.com/PaloAltoNetworks/pan-os-ansible/develop/requirements.txt
             ansible-galaxy collection install paloaltonetworks.panos networktocode.nautobot
           EOF
 
       - name: Run playbook on EC2
         run: |
-          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} << 'EOF'
+          ssh -vvv -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} << 'EOF'
             export PALO_ADMIN_USER=${{ secrets.PALO_ADMIN_USER }}
             export PALO_ADMIN_PW=${{ secrets.PALO_ADMIN_PW }}
             ansible-playbook /tmp/create-object-and-nat-viaGH.yml \
