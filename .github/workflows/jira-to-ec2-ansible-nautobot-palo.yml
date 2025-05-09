@@ -106,13 +106,31 @@ jobs:
         # Exits the workflow if no VPC is found with the specified tag.
         # Outputs the VPC ID for use in subsequent steps.
     
-      - name: Get SG ID from VPC
+      - name: Get security‐group ID from EC2 instance
         id: sg
         run: |
-          sg_id=$(aws ec2 describe-security-groups \
-            --filters "Name=group-name,Values=nautobot-sg" "Name=vpc-id,Values=${{ steps.vpc.outputs.id }}" \
-            --query "SecurityGroups[0].GroupId" \
+          # find the EC2 instance ID by its Name tag
+          instance_id=$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:Name,Values=${{ vars.EC2_INSTANCE_NAME }}" \
+              "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].InstanceId" \
             --output text)
+          if [[ -z "$instance_id" || "$instance_id" == "None" ]]; then
+            echo "❌ Could not find running instance with Name=${{ vars.EC2_INSTANCE_NAME }}" >&2
+            exit 1
+          fi
+
+          # now pull the first SG attached to that instance
+          sg_id=$(aws ec2 describe-instances \
+            --instance-ids "$instance_id" \
+            --query "Reservations[0].Instances[0].SecurityGroups[0].GroupId" \
+            --output text)
+          if [[ -z "$sg_id" || "$sg_id" == "None" ]]; then
+            echo "❌ Could not determine SG for $instance_id" >&2
+            exit 1
+          fi
+
           echo "id=$sg_id" >> "$GITHUB_OUTPUT"
     
       - name: Get EC2 Public IP by Name tag
