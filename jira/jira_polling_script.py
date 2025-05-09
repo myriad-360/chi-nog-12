@@ -5,6 +5,11 @@ import json
 import requests
 from requests.auth import HTTPBasicAuth
 from dotenv import load_dotenv
+import pathlib
+
+# Determine the project root directory (one level up from script)
+SCRIPT_DIR = pathlib.Path(__file__).parent.resolve()
+PROJECT_ROOT = SCRIPT_DIR.parent
 
 def main():
     load_dotenv()
@@ -58,7 +63,7 @@ def main():
     keys   = [i["key"] for i in issues]
 
     # ── 4) Load memory of processed keys ──────────────────────────────────
-    mem_file = ".processed_issues"
+    mem_file = str(PROJECT_ROOT / ".processed_issues")
     seen     = set()
     if os.path.exists(mem_file):
         with open(mem_file) as f:
