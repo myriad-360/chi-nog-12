@@ -204,10 +204,12 @@ jobs:
       - name: Revoke SSH rule from Security Group
         if: always()
         run: |
+          SG_ID="${{ steps.sg.outputs.id }}"
           runner_ip=$(curl -s https://api.ipify.org)
+          echo "Revoking SSH ingress for runner IP ${runner_ip}/32 from SG ${SG_ID}"
           aws ec2 revoke-security-group-ingress \
-            --group-id ${{ secrets.SG_ID }} \
+            --group-id "${SG_ID}" \
             --protocol tcp \
             --port 22 \
-            --cidr ${runner_ip}/32 \
-            --region ${{ vars.AWS_REGION }} || true
+            --cidr "${runner_ip}/32" \
+            --region "${{ vars.AWS_REGION }}" || true
