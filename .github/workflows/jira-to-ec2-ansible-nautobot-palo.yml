@@ -167,10 +167,11 @@ jobs:
           pip install -r https://raw.githubusercontent.com/PaloAltoNetworks/pan-os-ansible/develop/requirements.txt
           ansible-galaxy collection install paloaltonetworks.panos networktocode.nautobot
 
-      - name: Copy playbook & JSON to EC2
+      - name: Copy playbook, inventory & JSON to EC2
         run: |
           scp -o StrictHostKeyChecking=no -i key.pem \
             ansible/palo/object-and-nat-nautobot/create-object-and-nat-viaGH.yml \
+            -r ansible/palo/object-and-nat-nautobot/inventory \
             artifacts/*.json \
             ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }}:/tmp/
 
@@ -196,8 +197,9 @@ jobs:
             export ARTIFACT="/tmp/$JSON_FILE"
 
             ansible-playbook /tmp/create-object-and-nat-viaGH.yml \
-              -i "localhost," \
+              -i /tmp/inventory/nautobot.yml \
               --extra-vars "@/tmp/$JSON_FILE"
+            
           EOF
 
       - name: Revoke SSH rule from Security Group
