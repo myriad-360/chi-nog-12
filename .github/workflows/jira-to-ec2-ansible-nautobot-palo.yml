@@ -150,6 +150,8 @@ jobs:
         shell: bash
         env:
           TARGET_IP: ${{ steps.ec2_ip.outputs.ip }}
+          PALO_ADMIN_USER: ${{ secrets.PALO_ADMIN_USER }}
+          PALO_ADMIN_PW:   ${{ secrets.PALO_ADMIN_PW }}
         run: |
           shopt -s nullglob
           files=(artifacts/*.json)

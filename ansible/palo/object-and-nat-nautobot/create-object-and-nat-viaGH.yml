@@ -36,8 +36,10 @@
   vars:
     device:
       ip_address: "{{ ansible_host }}"
-      username: "{{ lookup('env','PANOS_USER') }}"
-      password: "{{ lookup('env','PANOS_PASSWORD') }}"
+      # username: "{{ lookup('env','PANOS_USER') }}"
+      # password: "{{ lookup('env','PANOS_PASSWORD') }}"
+      username: "{{ lookup('env','PALO_ADMIN_USER') }}"
+      password: "{{ lookup('env','PALO_ADMIN_PW') }}"
 
   collections:
     - paloaltonetworks.panos
@@ -85,11 +87,22 @@
     # object_description: "Web server internal IP address"
     # rule_name: "inbound-web-server-1"
     # rule_description: "Inbound web server rule"
+    - name: Debug mixed test output
+      debug:
+        msg:
+          - "Address Obect Name: {{ issue_key }}-{{destination_ip}}"
+          - "NAT Rule Name: {{ issue_key }}-{{destination_ip}}"
+          - "Hostname: {{ inventory_hostname }}"
+          - "Device IP: {{ ansible_host }}"
+          - "Business Justification: {{ business_justification }}"
+          - "Destination IP: {{ destination_ip }}"
+          - "Issue Key: {{ issue_key }}"
+          - "Summary: {{ summary }}"
 
     - name: Create source address object
       paloaltonetworks.panos.panos_address_object:
         provider: "{{ device }}"
-        name: "{{ issue_key}}-{{destination_ip}}"
+        name: "{{ issue_key }}-{{destination_ip}}"
         address_type: "ip-netmask"
         value: "{{ destination_ip }}"
         description: "{{ description }}"
@@ -98,7 +111,7 @@
     - name: Add NAT rule for inbound web server
       paloaltonetworks.panos.panos_nat_rule2:
         provider: '{{ device }}'
-        name: "{{ issue_key }}-{{ destination_ip}}"
+        name: "{{ issue_key }}-{{ destination_ip }}"
         description: "{{ summary }}"
         nat_type: 'ipv4'
         from_zones:
