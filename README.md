@@ -8,6 +8,12 @@ This project automates the provisioning, configuration, and CI/CD-driven deploym
 - **Python Jira Automation**: The [`jira_polling_script.py`](./jira/jira_polling_script.py) polls the [Jira Cloud API](https://developer.atlassian.com/cloud/jira/platform/rest/v3/) to fetch new firewall request tickets and renders them as JSON artifacts, while the [`jira_update_ticket.py`](./jira/jira_update_ticket.py) script transitions processed tickets.  
 - **GitHub Actions**: Orchestrates the Jira polling, artifact upload, EC2 deployment, Ansible execution, and Jira status updates on a schedule or manual dispatch.  
 
+# Demo Video
+[![Network Automation Pipelines]([https://www.youtube.com/watch?v=VIDEO_ID](https://youtu.be/rEISJXbu_cU))
+
+
+
+
 <details>
 <summary>Repository Structure</summary>
 
