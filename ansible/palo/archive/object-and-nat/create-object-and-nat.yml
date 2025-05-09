@@ -76,11 +76,33 @@
         state: 'present'
 
 
-    - name: Commit configuration
-      paloaltonetworks.panos.panos_commit_firewall:
-        provider: "{{ device }}"
-      register: results
+    - name: Add NAT rule for inbound web server
+      paloaltonetworks.panos.panos_nat_rule2:
+        provider: '{{ device }}'
+        name: "{{ rule_name }}"
+        description: "{{ rule_description }}"
+        nat_type: 'ipv4'
+        from_zones:
+          - 'outside'
+        to_zones:
+          - 'outside'
+        service: 'service-http'
+        source_addresses:
+          - 'any'
+        destination_addresses:
+          #- '172.16.1.166'
+          - "{{ object_name }}"
+        destination_dynamic_translated_address: 'web-server-internal-ip'
+        destination_dynamic_translated_port: 80
+        destination_dynamic_translated_distribution: 'round-robin'
+        state: 'present'
+
+
+    # - name: Commit configuration
+    #   paloaltonetworks.panos.panos_commit_firewall:
+    #     provider: "{{ device }}"
+    #   register: results
     
-    - name: Dispaly commit message
-      debug:
-        msg: "Commit with Job ID: {{ results.jobid }} had output: {{ results.details }}"
+    # - name: Dispaly commit message
+    #   debug:
+    #     msg: "Commit with Job ID: {{ results.jobid }} had output: {{ results.details }}"

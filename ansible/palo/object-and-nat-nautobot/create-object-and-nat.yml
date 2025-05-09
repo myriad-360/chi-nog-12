@@ -1,0 +1,82 @@
+---
+# This playbook is used to configure a Palo Alto Networks firewall by creating an address object, 
+# adding a NAT rule, and committing the configuration. It uses the Palo Alto Networks Ansible 
+# collection to interact with the firewall.
+
+# Tasks:
+# 1. Gather system info:
+#    - Specifies the target host as "firewall" and uses local connection.
+#    - Loads variables from external files: `vars/palo-secrets.yml` and `vars/input-variables.yml`.
+#    - Defines the `device` variable containing firewall connection details.
+
+# 2. Create source address object:
+#    - Creates an address object on the firewall with the specified name, IP address, and description.
+#    - Ensures the object is in the "present" state.
+
+# 3. Add NAT rule for inbound web server:
+#    - Configures a NAT rule to forward HTTP traffic from an external address to an internal web server.
+#    - Uses the previously created address object as the destination address.
+#    - Sets the NAT rule to use dynamic translation with round-robin distribution.
+
+# 4. Commit configuration:
+#    - Commits the configuration changes to the firewall.
+#    - Registers the commit results for further use.
+
+# 5. Display commit message:
+#    - Outputs the commit job ID and details for verification.
+
+# Documentation:
+# https://pan.dev/ansible/docs/panos/
+# https://galaxy.ansible.com/ui/repo/published/paloaltonetworks/panos/docs/
+- name: Gather system info
+  hosts: all
+  connection: local
+  vars_files:
+    - vars/input-variables.yml
+  vars:
+    device:
+      ip_address: "{{ ansible_host }}"
+      username: "{{ lookup('env','PANOS_USER') }}"
+      password: "{{ lookup('env','PANOS_PASSWORD') }}"
+
+  collections:
+    - paloaltonetworks.panos
+
+  tasks:
+    - name: Create source address object
+      paloaltonetworks.panos.panos_address_object:
+        provider: "{{ device }}"
+        name: "{{ object_name }}"
+        address_type: "ip-netmask"
+        value: "{{ object_ip }}"
+        description: "{{ object_description }}"
+        state: "present"
+
+    - name: Add NAT rule for inbound web server
+      paloaltonetworks.panos.panos_nat_rule2:
+        provider: '{{ device }}'
+        name: "{{ rule_name }}"
+        description: "{{ rule_description }}"
+        nat_type: 'ipv4'
+        from_zones:
+          - 'outside'
+        to_zones:
+          - 'outside'
+        to_interface: 'ethernet1/1'
+        service: 'any'
+        source_addresses:
+          - 'any'
+        destination_addresses:
+          - '172.16.1.166'
+        destination_translated_address: 'web-server-internal-ip'
+        state: 'present'
+
+
+    - name: Commit configuration
+      paloaltonetworks.panos.panos_commit_firewall:
+        provider: "{{ device }}"
+      register: results
+    
+    - name: Dispaly commit message
+      debug:
+        msg: "Commit with Job ID: {{ results.jobid }} had output: {{ results.details }}"
