@@ -139,7 +139,7 @@ jobs:
             echo "❌ Could not determine SG for $instance_id" >&2
             exit 1
           fi
-          echo "id=$sg_id" >> "$GITHUB_OUTPUT"
+          echo "id=$sg_id" >>"$GITHUB_OUTPUT"
 
       - name: Get EC2 Public IP by Name tag
         id: ec2_ip
@@ -205,6 +205,14 @@ jobs:
                 --extra-vars "@/tmp/$JSON_FILE"
             done
           EOF
+
+      - name: Set up Python 3.11 for Jira update
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies for Jira update
+        run: pip install requests python-dotenv
 
       - name: Update Jira ticket status
         if: success()
