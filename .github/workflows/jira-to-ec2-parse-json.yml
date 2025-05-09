@@ -147,19 +147,19 @@ jobs:
           TARGET_IP: ${{ steps.ec2_ip.outputs.ip }}
         run: |
           shopt -s nullglob
-          files=(artifacts/*.json)
+          files=(jira/artifacts/*.json)
           ARTIFACT="${files[0]}"
           if [[ -z "$ARTIFACT" ]]; then
             echo "❌ No artifact to process" >&2
             exit 1
           fi
+          export ARTIFACT
 
           ansible-playbook ansible/print_json_vars.yml \
             -i "$TARGET_IP," \
             --private-key key.pem \
             -u ${{ secrets.EC2_USER }} \
-            --ssh-extra-args="-o StrictHostKeyChecking=no" \
-            --extra-vars "@$ARTIFACT"
+            --ssh-extra-args="-o StrictHostKeyChecking=no"
 
       - name: Revoke SSH rule from Security Group
         if: always()
