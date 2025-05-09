@@ -146,28 +146,29 @@ jobs:
           pip install -r https://raw.githubusercontent.com/PaloAltoNetworks/pan-os-ansible/develop/requirements.txt
           ansible-galaxy collection install paloaltonetworks.panos networktocode.nautobot
 
-      - name: Dump ticket JSON via Ansible
-        shell: bash
-        env:
-          TARGET_IP: ${{ steps.ec2_ip.outputs.ip }}
-          PALO_ADMIN_USER: ${{ secrets.PALO_ADMIN_USER }}
-          PALO_ADMIN_PW:   ${{ secrets.PALO_ADMIN_PW }}
+      - name: Copy playbook & JSON to EC2
         run: |
-          shopt -s nullglob
-          files=(artifacts/*.json)
-          ARTIFACT="${files[0]}"
-          export ARTIFACT="$(pwd)/${ARTIFACT}"
-          if [[ -z "$ARTIFACT" ]]; then
-            echo "❌ No artifact to send" >&2
-            exit 1
-          fi
-          export ARTIFACT
+          scp -o StrictHostKeyChecking=no -i key.pem \
+            ansible/palo/object-and-nat-nautobot/create-object-and-nat-viaGH.yml \
+            artifacts/*.json \
+            ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }}:/tmp/
 
-          ansible-playbook ansible/palo/object-and-nat-nautobot/create-object-and-nat-viaGH.yml \
-            -i "$TARGET_IP," \
-            --private-key key.pem \
-            -u ${{ secrets.EC2_USER }} \
-            --ssh-extra-args="-o StrictHostKeyChecking=no"
+      - name: Install PAN‑OS requirements on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} << 'EOF'
+            pip install -r https://raw.githubusercontent.com/PaloAltoNetworks/pan-os-ansible/develop/requirements.txt
+            ansible-galaxy collection install paloaltonetworks.panos networktocode.nautobot
+          EOF
+
+      - name: Run playbook on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} << 'EOF'
+            export PALO_ADMIN_USER=${{ secrets.PALO_ADMIN_USER }}
+            export PALO_ADMIN_PW=${{ secrets.PALO_ADMIN_PW }}
+            ansible-playbook /tmp/create-object-and-nat-viaGH.yml \
+              -i "localhost," \
+              --extra-vars "@/tmp/$(basename artifacts/*.json)"
+          EOF
 
       - name: Revoke SSH rule from Security Group
         if: always()

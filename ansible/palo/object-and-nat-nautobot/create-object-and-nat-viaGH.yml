@@ -31,8 +31,8 @@
 - name: Gather system info
   hosts: all
   connection: local
-  vars_files:
-    - vars/input-variables.yml
+  # vars_files:
+  #   - vars/input-variables.yml
   vars:
     device:
       ip_address: "{{ ansible_host }}"
