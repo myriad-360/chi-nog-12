@@ -169,7 +169,7 @@ jobs:
 
       - name: Copy playbook & JSON to EC2
         run: |
-          scp -vvv -o StrictHostKeyChecking=no -i key.pem \
+          scp -o StrictHostKeyChecking=no -i key.pem \
             ansible/palo/object-and-nat-nautobot/create-object-and-nat-viaGH.yml \
             artifacts/*.json \
             ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }}:/tmp/
@@ -183,12 +183,18 @@ jobs:
 
       - name: Run playbook on EC2
         run: |
-          ssh -vvv -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} << 'EOF'
+          ssh -vvv -o StrictHostKeyChecking=no -i key.pem \
+            ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} << 'EOF'
             export PALO_ADMIN_USER=${{ secrets.PALO_ADMIN_USER }}
             export PALO_ADMIN_PW=${{ secrets.PALO_ADMIN_PW }}
+
+            # Find the JSON we just scp'd into /tmp
+            JSON_FILE=$(basename /tmp/*.json)
+            echo "Using /tmp/$JSON_FILE"
+
             ansible-playbook /tmp/create-object-and-nat-viaGH.yml \
               -i "localhost," \
-              --extra-vars "@/tmp/$(basename artifacts/*.json)"
+              --extra-vars "@/tmp/$JSON_FILE"
           EOF
 
       - name: Revoke SSH rule from Security Group
