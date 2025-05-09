@@ -6,12 +6,15 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write              # allow updating .processed_issues
+  contents: write   # allow updating .processed_issues
 
 jobs:
   # Job A: Poll Jira & upload artifacts
   poll-and-flatten:
     runs-on: ubuntu-latest
+    outputs:
+      no_tickets: ${{ steps.jira_poll.outputs.no_tickets }}
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -32,22 +35,31 @@ jobs:
           touch .processed_issues
 
       - name: Run Jira polling script
+        id: jira_poll
+        run: |
+          output=$(python jira/jira_polling_script.py)
+          echo "$output"
+          if [[ "$output" == "No new tickets; exiting" ]]; then
+            echo "no_tickets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "no_tickets=false" >> "$GITHUB_OUTPUT"
+          fi
         env:
           JIRA_EMAIL:   ${{ secrets.JIRA_EMAIL }}
           JIRA_TOKEN:   ${{ secrets.JIRA_TOKEN }}
           JIRA_PROJECT: ${{ vars.JIRA_PROJECT }}
           JIRA_STATUS:  ${{ vars.JIRA_STATUS }}
           JIRA_SITE:    ${{ vars.JIRA_SITE }}
-        run: python jira/jira_polling_script.py
 
       - name: Upload artifacts
+        if: steps.jira_poll.outputs.no_tickets == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: jira-artifacts
           path: artifacts/*.json
 
       - name: Commit & push memory update
-        if: success()
+        if: steps.jira_poll.outputs.no_tickets == 'false' && success()
         run: |
           git config user.name  "GitHub Actions"
           git config user.email "actions@github.com"
@@ -58,6 +70,7 @@ jobs:
   # Job B: Download artifact and deploy to EC2
   deploy-to-ec2:
     needs: poll-and-flatten
+    if: needs.poll-and-flatten.outputs.no_tickets == 'false'
     runs-on: ubuntu-latest
 
     steps:
@@ -90,8 +103,7 @@ jobs:
       - name: Get GitHub runner's public IP
         id: ip
         run: echo "ip=$(curl -s https://api.ipify.org)" >> "$GITHUB_OUTPUT"
-        # Retrieves the public IP address of the GitHub runner and stores it in the workflow output.
-  
+
       - name: Get VPC ID by Name tag
         id: vpc
         run: |
@@ -104,14 +116,10 @@ jobs:
             exit 1
           fi
           echo "id=$vpc_id" >> "$GITHUB_OUTPUT"
-        # Queries AWS to find the VPC ID associated with a specific Name tag.
-        # Exits the workflow if no VPC is found with the specified tag.
-        # Outputs the VPC ID for use in subsequent steps.
-    
-      - name: Get security‐group ID from EC2 instance
+
+      - name: Get security‑group ID from EC2 instance
         id: sg
         run: |
-          # find the EC2 instance ID by its Name tag
           instance_id=$(aws ec2 describe-instances \
             --filters \
               "Name=tag:Name,Values=${{ vars.EC2_INSTANCE_NAME }}" \
@@ -119,11 +127,9 @@ jobs:
             --query "Reservations[0].Instances[0].InstanceId" \
             --output text)
           if [[ -z "$instance_id" || "$instance_id" == "None" ]]; then
-            echo "❌ Could not find running instance with Name=${{ vars.EC2_INSTANCE_NAME }}" >&2
+            echo "❌ Could not find running instance" >&2
             exit 1
           fi
-
-          # now pull the first SG attached to that instance
           sg_id=$(aws ec2 describe-instances \
             --instance-ids "$instance_id" \
             --query "Reservations[0].Instances[0].SecurityGroups[0].GroupId" \
@@ -132,29 +138,28 @@ jobs:
             echo "❌ Could not determine SG for $instance_id" >&2
             exit 1
           fi
-
           echo "id=$sg_id" >> "$GITHUB_OUTPUT"
-    
+
       - name: Get EC2 Public IP by Name tag
         id: ec2_ip
         run: |
-          INSTANCE_NAME="${{ vars.EC2_INSTANCE_NAME }}"
-          echo "Looking up Public IP for instance named: $INSTANCE_NAME"
           ip=$(aws ec2 describe-instances \
             --filters \
-              "Name=tag:Name,Values=${INSTANCE_NAME}" \
+              "Name=tag:Name,Values=${{ vars.EC2_INSTANCE_NAME }}" \
               "Name=instance-state-name,Values=running" \
             --query "Reservations[0].Instances[0].PublicIpAddress" \
             --output text)
           if [[ -z "$ip" || "$ip" == "None" ]]; then
-            echo "❌ No running instance found with Name=${INSTANCE_NAME}"
+            echo "❌ No running instance found" >&2
             exit 1
           fi
           echo "ip=$ip" >> "$GITHUB_OUTPUT"
+
       - name: Debug SG lookup
         run: |
           echo "VPC ID = ${{ steps.vpc.outputs.id }}"
           echo "SG ID  = ${{ steps.sg.outputs.id }}"
+
       - name: Authorize SSH from runner IP
         run: |
           aws ec2 authorize-security-group-ingress \
@@ -163,7 +168,7 @@ jobs:
             --port 22 \
             --cidr ${{ steps.ip.outputs.ip }}/32 \
             --region ${{ vars.AWS_REGION }} || true
-      
+
       - name: Install PAN-OS Ansible requirements and collections
         run: |
           pip install -r https://raw.githubusercontent.com/PaloAltoNetworks/pan-os-ansible/develop/requirements.txt
@@ -179,29 +184,21 @@ jobs:
 
       - name: Install PAN‑OS requirements on EC2
         run: |
-          ssh -vvv -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} << 'EOF'
             pip install -r https://raw.githubusercontent.com/PaloAltoNetworks/pan-os-ansible/develop/requirements.txt
             ansible-galaxy collection install paloaltonetworks.panos networktocode.nautobot
           EOF
 
       - name: Run playbook on EC2
         run: |
-          ssh -o StrictHostKeyChecking=no -i key.pem \
-            ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }} << 'EOF'
             export PALO_ADMIN_USER=${{ secrets.PALO_ADMIN_USER }}
             export PALO_ADMIN_PW=${{ secrets.PALO_ADMIN_PW }}
-
-            # pick up the JSON we scp'd into /tmp
             JSON_FILE=$(basename /tmp/*.json)
-            echo "Using /tmp/$JSON_FILE"
-
-            # *** add this line ***
             export ARTIFACT="/tmp/$JSON_FILE"
-
             ansible-playbook /tmp/create-object-and-nat-viaGH.yml \
               -i /tmp/inventory/nautobot.yml \
               --extra-vars "@/tmp/$JSON_FILE"
-            
           EOF
 
       - name: Revoke SSH rule from Security Group
