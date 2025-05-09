@@ -169,9 +169,9 @@ jobs:
 
       - name: Copy playbook, inventory & JSON to EC2
         run: |
-          scp -o StrictHostKeyChecking=no -i key.pem \
+          scp -o StrictHostKeyChecking=no -i key.pem -r \
             ansible/palo/object-and-nat-nautobot/create-object-and-nat-viaGH.yml \
-            -r ansible/palo/object-and-nat-nautobot/inventory \
+            ansible/palo/object-and-nat-nautobot/inventory \
             artifacts/*.json \
             ${{ secrets.EC2_USER }}@${{ steps.ec2_ip.outputs.ip }}:/tmp/
 
