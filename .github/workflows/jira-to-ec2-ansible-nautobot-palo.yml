@@ -140,6 +140,11 @@ jobs:
             --port 22 \
             --cidr ${{ steps.ip.outputs.ip }}/32 \
             --region ${{ vars.AWS_REGION }} || true
+      
+      - name: Install PAN-OS Ansible requirements and collections
+        run: |
+          pip install -r https://raw.githubusercontent.com/PaloAltoNetworks/pan-os-ansible/develop/requirements.txt
+          ansible-galaxy collection install paloaltonetworks.panos networktocode.nautobot
           
       - name: Dump ticket JSON via Ansible
         shell: bash
