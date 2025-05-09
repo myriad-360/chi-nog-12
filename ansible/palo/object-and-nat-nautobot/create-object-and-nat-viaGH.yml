@@ -123,7 +123,7 @@
         source_addresses:
           - 'any'
         destination_addresses:
-          - "{{ destination_ip }}"
+          - "172.16.1.166" #This is an ip assigned to an interface on the palo
         destination_translated_address: "{{ issue_key }}-{{ destination_ip | replace('/', '-') }}"
         state: 'present'
 
