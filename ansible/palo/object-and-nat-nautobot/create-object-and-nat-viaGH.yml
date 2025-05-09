@@ -123,8 +123,8 @@
         source_addresses:
           - 'any'
         destination_addresses:
-          - '172.16.1.166'
-        destination_translated_address: 'web-server-internal-ip'
+          - "{{ destination_ip }}"
+        destination_translated_address: "{{ issue_key }}-{{ destination_ip | replace('/', '-') }}"
         state: 'present'
 
 
